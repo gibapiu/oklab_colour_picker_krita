@@ -1,0 +1,13 @@
+# Exclude Git-specific files
+.gitattributes export-ignore
+.gitignore export-ignore
+.githooks/ export-ignore
+
+# Exclude docs, dev scripts and tests
+docs/ export-ignore
+tests/ export-ignore
+scripts/ export-ignore
+pytest.ini
+requirements-dev.txt
+README.md
+LICENSE.md

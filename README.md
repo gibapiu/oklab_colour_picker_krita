@@ -24,7 +24,7 @@ OKLab was introduced by[Björn Ottosson](https://bottosson.github.io/posts/oklab
 
 Needs Krita 5.2+ and NumPy in Krita's Python.
 
-1. Download release as ZIP.
+1. [Download latest release](https://github.com/gibapiu/oklab_colour_picker_krita/releases/latest) as ZIP.
 2. In Krita select Tools&rarrScripts&rarrImport Python Plugin From File.
 3. Restart Krita.
 4. Open **Settings &rarr; Dockers &rarr; OKLab Colour Selector**.
@@ -42,6 +42,7 @@ Short walkthrough: [docs/usage.md](docs/usage.md).
 ## Trouble?
 
 Most issues are missing NumPy or a `.desktop` file in the wrong folder.
+
 See [docs/troubleshooting.md](docs/troubleshooting.md).
 
 
