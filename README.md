@@ -10,7 +10,7 @@ HSV and HSL are fundamentally flawed descriptions of sRGB not related to percept
 OKLab was designed around perception of colour. So in an OKLCH color picker equal steps look equal, hue changes keep their lightness, and lightness changes don't shift hue.
 As a result - less time spent fighting with the picker.
 
-OKLab was introduced by[Björn Ottosson](https://bottosson.github.io/posts/oklab/) in 2020.
+OKLab was introduced by [Björn Ottosson](https://bottosson.github.io/posts/oklab/) in 2020.
 
 ## Highlights
 
@@ -41,8 +41,8 @@ Short walkthrough: [docs/usage.md](docs/usage.md).
 
 ## Trouble?
 
-Most issues are missing NumPy or a `.desktop` file in the wrong folder.
+Most issues are missing NumPy or a `.desktop` file in the wrong folder. See [docs/troubleshooting.md](docs/troubleshooting.md) for more details to to fix it.
 
-See [docs/troubleshooting.md](docs/troubleshooting.md).
+Spot a bug or have a suggestion? Open [an Issue](https://github.com/gibapiu/oklab_colour_picker_krita/issues) and stay tuned!
 
 

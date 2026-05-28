@@ -7,7 +7,7 @@
 docs/ export-ignore
 tests/ export-ignore
 scripts/ export-ignore
-pytest.ini
-requirements-dev.txt
-README.md
-LICENSE.md
+pytest.ini export-ignore
+requirements-dev.txt export-ignore
+README.md export-ignore
+LICENSE.md export-ignore
