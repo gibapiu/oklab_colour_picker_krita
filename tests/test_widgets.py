@@ -1,0 +1,528 @@
+import math
+
+import numpy as np
+import pytest
+
+pytest.importorskip("pytestqt")
+pytest.importorskip("PyQt5")
+
+from PyQt5 import QtCore, QtGui, QtWidgets
+
+from oklab_colour_picker import color_math
+from oklab_colour_picker.colour_state import ColourIntent
+from oklab_colour_picker.selector_models import (
+    HueLightnessSliceModel,
+    LightnessChromaSliceModel,
+    LightnessSliceModel,
+    SelectorModel,
+    SelectorSelection,
+)
+from oklab_colour_picker.widgets import SelectorWidget
+
+
+def _paint_of(c):
+    if c is None:
+        return None
+    return c.paint_oklab if isinstance(c, ColourIntent) else c
+
+
+def test_mouse_drag_emits_previews_and_commit(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(64, 32)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    previews = []
+    commits = []
+    widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+
+    start = QtCore.QPoint(8, 12)
+    end = QtCore.QPoint(24, 16)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, start, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseMove, end, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, end, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+    assert len(previews) >= 2
+    assert len(commits) == 1
+    np.testing.assert_allclose(commits[0], widget.model.color_at_position((end.x(), end.y()), _size(widget)))
+
+
+def test_cold_start_invalid_release_does_not_commit(qtbot):
+    widget = SelectorWidget(LightnessSliceModel(lightness=0.5))
+    widget.resize(40, 80)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    commits = []
+    previews = []
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+    widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
+
+    invalid_corner = QtCore.QPoint(0, 0)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, invalid_corner, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, invalid_corner, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+    assert commits == []
+    assert previews and all(p is None for p in previews)
+
+
+def test_warm_off_leaf_press_snaps_and_commits(qtbot):
+    widget = SelectorWidget(LightnessSliceModel(lightness=0.5))
+    widget.resize(40, 80)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    previous = widget.model.color_at_position((20, 40), _size(widget))
+    assert previous is not None
+    widget.set_selected_colour(previous)
+
+    commits = []
+    previews = []
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+    widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
+
+    off_leaf = QtCore.QPoint(0, 0)
+    expected = widget.model.snapped_color_at_position((off_leaf.x(), off_leaf.y()), _size(widget))
+    assert expected is not None
+    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, off_leaf, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseMove, off_leaf, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, off_leaf, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+    assert len(commits) == 1
+    np.testing.assert_allclose(commits[0], expected)
+    np.testing.assert_allclose(widget.selected_colour, expected)
+    assert previews and previews[0] is not None and previews[-1] is not None
+
+
+def test_hue_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
+    widget = SelectorWidget(LightnessSliceModel(lightness=0.5))
+    widget.resize(64, 64)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    previous = widget.model.color_at_position((32, 32), _size(widget))
+    assert previous is not None
+    widget.set_selected_colour(previous)
+
+    commits = []
+    previews = []
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+    widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
+
+    first_valid = QtCore.QPoint(42, 32)
+    latest_valid = QtCore.QPoint(46, 32)
+    invalid_corner = QtCore.QPoint(0, 0)
+    expected = widget.model.snapped_color_at_position((invalid_corner.x(), invalid_corner.y()), _size(widget))
+    assert expected is not None
+
+    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, first_valid, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseMove, latest_valid, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseMove, invalid_corner, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, invalid_corner, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+    # Invalid movement after a valid hit snaps to the nearest selectable
+    # boundary, so the indicator keeps following the drag.
+    assert len(previews) == 3
+    assert not any(preview is None for preview in previews)
+    assert len(commits) == 1
+    expected_position = widget.model.position_for_intent(color_math.oklab_to_oklch(expected), _size(widget))
+    assert expected_position is not None
+    assert widget.indicator_position() == pytest.approx(expected_position, abs=1.0)
+    np.testing.assert_allclose(commits[0], expected)
+    np.testing.assert_allclose(widget.selected_colour, expected)
+
+
+def test_lightness_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(64, 32)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    previous = widget.model.color_at_position((8, 16), _size(widget))
+    assert previous is not None
+    widget.set_selected_colour(previous)
+
+    commits = []
+    previews = []
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+    widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
+
+    first_valid = QtCore.QPoint(12, 16)
+    latest_valid = QtCore.QPoint(24, 16)
+    invalid_gamut = QtCore.QPoint(63, 16)
+    expected = widget.model.snapped_color_at_position((invalid_gamut.x(), invalid_gamut.y()), _size(widget))
+    assert expected is not None
+    assert widget.model.color_at_position((invalid_gamut.x(), invalid_gamut.y()), _size(widget)) is None
+
+    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, first_valid, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseMove, latest_valid, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseMove, invalid_gamut, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, invalid_gamut, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+    # Invalid movement after a valid hit snaps to the gamut boundary.
+    assert len(previews) == 3
+    assert not any(preview is None for preview in previews)
+    expected_position = widget.model.position_for_intent(color_math.oklab_to_oklch(expected), _size(widget))
+    assert expected_position is not None
+    assert widget.indicator_position() == pytest.approx(expected_position, abs=1.0)
+    assert len(commits) == 1
+    np.testing.assert_allclose(commits[0], expected)
+    np.testing.assert_allclose(widget.selected_colour, expected)
+
+
+def test_achromatic_hue_lightness_drag_outside_keeps_cursor_hue_anchor(qtbot):
+    widget = SelectorWidget(HueLightnessSliceModel(chroma=0.0))
+    widget.resize(101, 101)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    start = QtCore.QPoint(50, 20)
+    outside = QtCore.QPoint(50, -20)
+    snapped = widget.model.snapped_selector_selection_at_position((outside.x(), outside.y()), _size(widget))
+    assert snapped is not None
+    expected = snapped.paint_oklab
+    expected_position = snapped.position
+
+    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, start, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseMove, outside, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, outside, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+    assert widget.state == "PINNED"
+    assert widget.indicator_position() == pytest.approx(expected_position, abs=1.0)
+    np.testing.assert_allclose(widget.selected_colour, expected)
+
+
+def test_hue_lightness_out_of_zone_pick_computes_snap_once(qtbot, monkeypatch):
+    from oklab_colour_picker.models import hue_lightness_slice
+
+    widget = SelectorWidget(HueLightnessSliceModel(chroma=0.2))
+    widget.resize(101, 101)
+    qtbot.addWidget(widget)
+    widget.show()
+    point = (50.0, 50.0)
+    assert widget.model.color_at_position(point, _size(widget)) is None
+
+    original = hue_lightness_slice._snap_lightness_to_gamut
+    calls = []
+
+    def counted_snap(*args, **kwargs):
+        calls.append(args)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(hue_lightness_slice, "_snap_lightness_to_gamut", counted_snap)
+
+    pick = widget.pick(point)
+
+    assert pick is not None
+    assert len(calls) == 1
+
+
+def test_snapped_colour_with_unresolvable_position_still_commits(qtbot):
+    widget = SelectorWidget(UnresolvableSnapModel())
+    widget.resize(10, 10)
+    qtbot.addWidget(widget)
+    widget.show()
+    commits = []
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+
+    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, QtCore.QPoint(1, 1), QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseMove, QtCore.QPoint(8, 1), QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, QtCore.QPoint(8, 1), QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+    assert len(commits) == 1
+    np.testing.assert_allclose(commits[0], UnresolvableSnapModel.SNAPPED)
+    np.testing.assert_allclose(widget.selected_colour, UnresolvableSnapModel.SNAPPED)
+    assert widget.indicator_position() == pytest.approx((8.0, 1.0))
+
+
+def test_leave_during_drag_does_not_emit_invalid_preview(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(64, 32)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    previews = []
+    widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
+
+    point = QtCore.QPoint(24, 16)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, point, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    leave = QtCore.QEvent(QtCore.QEvent.Leave)
+    QtWidgets.QApplication.sendEvent(widget, leave)
+
+    assert len(previews) == 1
+    assert previews[0] is not None
+
+    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, point, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+
+def test_programmatic_colour_update_blocks_widget_signals(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(64, 32)
+    qtbot.addWidget(widget)
+
+    previews = []
+    commits = []
+    widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+
+    colour = widget.model.color_at_position((20, 10), (64, 32))
+    assert colour is not None
+    blocker = QtCore.QSignalBlocker(widget)
+    widget.set_selected_colour(colour)
+    del blocker
+
+    assert previews == []
+    assert commits == []
+    np.testing.assert_allclose(widget.selected_colour, colour)
+
+
+def test_keyboard_nudge_previews_then_commits_on_release(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(64, 32)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    start = widget.model.color_at_position((20, 10), _size(widget))
+    assert start is not None
+    widget.set_selected_colour(start)
+
+    previews = []
+    commits = []
+    widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+
+    press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    release = QtGui.QKeyEvent(QtCore.QEvent.KeyRelease, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    QtWidgets.QApplication.sendEvent(widget, press)
+
+    assert press.isAccepted()
+    assert len(previews) == 1
+    assert commits == []
+
+    QtWidgets.QApplication.sendEvent(widget, release)
+    assert release.isAccepted()
+    assert len(commits) == 1
+    np.testing.assert_allclose(commits[0], widget.selected_colour)
+
+
+def test_signal_payload_mutation_does_not_corrupt_widget_state(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(64, 32)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    commits = []
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+
+    point = QtCore.QPoint(24, 16)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, point, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, point, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+    selected = widget.selected_colour
+    assert selected is not None
+    commits[0][:] = 0.0
+    np.testing.assert_allclose(widget.selected_colour, selected)
+
+
+def test_keyboard_step_at_boundary_keeps_event_handled(qtbot):
+    widget = SelectorWidget(LightnessSliceModel(lightness=0.5))
+    widget.resize(40, 80)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    # Near the bottom of the disk (blue hue), where the L=0.5 gamut leaf
+    # extends out far enough that this radius is in-gamut.
+    start = widget.model.color_at_position((20, 55), _size(widget))
+    assert start is not None
+    widget.set_selected_colour(start)
+
+    event = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    QtWidgets.QApplication.sendEvent(widget, event)
+
+    assert event.isAccepted()
+    assert widget.selected_colour is not None
+
+
+def test_mouse_interaction_cancels_pending_keyboard_commit(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(64, 32)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    start = widget.model.color_at_position((20, 10), _size(widget))
+    assert start is not None
+    widget.set_selected_colour(start)
+
+    commits = []
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+
+    key_press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    QtWidgets.QApplication.sendEvent(widget, key_press)
+    assert key_press.isAccepted()
+
+    point = QtCore.QPoint(24, 16)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, point, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, point, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+    key_release = QtGui.QKeyEvent(QtCore.QEvent.KeyRelease, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    QtWidgets.QApplication.sendEvent(widget, key_release)
+
+    assert len(commits) == 1
+    np.testing.assert_allclose(commits[0], widget.selected_colour)
+
+
+def test_focus_loss_flushes_pending_keyboard_commit(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(64, 32)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    start = widget.model.color_at_position((20, 10), _size(widget))
+    assert start is not None
+    widget.set_selected_colour(start)
+
+    commits = []
+    widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
+
+    key_press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    QtWidgets.QApplication.sendEvent(widget, key_press)
+    assert key_press.isAccepted()
+
+    focus_out = QtGui.QFocusEvent(QtCore.QEvent.FocusOut)
+    QtWidgets.QApplication.sendEvent(widget, focus_out)
+
+    assert len(commits) == 1
+    np.testing.assert_allclose(commits[0], widget.selected_colour)
+
+
+def test_indicator_position_comes_from_model(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=math.pi / 3.0))
+    widget.resize(100, 50)
+    qtbot.addWidget(widget)
+
+    colour = color_math.oklch_to_oklab([0.25, 0.02, math.pi / 3.0])
+    widget.set_selected_colour(colour)
+
+    expected = widget.model.position_for_intent(color_math.oklab_to_oklch(colour), (100, 50))
+    assert expected is not None
+    assert widget.indicator_position() == pytest.approx(expected)
+
+
+def test_widget_keeps_intent_lch_and_paint_colour_together(qtbot):
+    hue = math.radians(210.0)
+    widget = SelectorWidget(HueLightnessSliceModel(chroma=0.0))
+    widget.resize(121, 121)
+    qtbot.addWidget(widget)
+
+    widget.set_selected_colour(ColourIntent.from_lch(0.5, 0.0, hue))
+    selected = widget.selected_colour
+    assert selected is not None
+    selected[:] = 0.0
+
+    assert widget.colour is not None
+    assert widget.colour.selector_lch == pytest.approx((0.5, 0.0, hue))
+    np.testing.assert_allclose(widget.selected_colour, [0.5, 0.0, 0.0], atol=1e-12)
+    assert widget.indicator_position() == pytest.approx(
+        (
+            60.0 + 30.0 * math.cos(hue),
+            60.0 - 30.0 * math.sin(hue),
+        )
+    )
+
+
+def test_indicator_position_stays_strict_for_out_of_gamut_leaf_colour(qtbot):
+    widget = SelectorWidget(LightnessSliceModel(lightness=0.5))
+    widget.resize(101, 101)
+    qtbot.addWidget(widget)
+
+    colour = color_math.oklch_to_oklab([0.5, color_math.SRGB_MAX_CHROMA, 0.0])
+    assert widget.model.position_for_intent(color_math.oklab_to_oklch(colour), _size(widget)) is None
+    assert widget.model.indicator_for_intent(color_math.oklab_to_oklch(colour), _size(widget)) is not None
+
+    widget.set_selected_colour(colour)
+
+    assert widget.indicator_position() is None
+
+
+def test_paint_event_renders_selector_image(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(32, 24)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    image = QtGui.QImage(widget.size(), QtGui.QImage.Format_RGBA8888)
+    image.fill(QtCore.Qt.transparent)
+    painter = QtGui.QPainter(image)
+    widget.render(painter)
+    painter.end()
+
+    nontransparent = False
+    for y in range(image.height()):
+        for x in range(image.width()):
+            if QtGui.QColor(image.pixel(x, y)).alpha() != 0:
+                nontransparent = True
+                break
+        if nontransparent:
+            break
+    assert nontransparent
+
+
+def test_pick_uses_selector_domain_snap():
+    widget = SelectorWidget(UnresolvableSnapModel())
+    widget.resize(40, 20)
+
+    picked = widget.pick((8.0, 3.0))
+
+    assert type(picked).__name__ == "SnappedPick"
+    np.testing.assert_allclose(picked.colour.paint_oklab, UnresolvableSnapModel.SNAPPED)
+    assert picked.position == pytest.approx((8.0, 3.0))
+
+
+def _send_mouse(widget, event_type, position, button, buttons):
+    event = QtGui.QMouseEvent(
+        event_type,
+        QtCore.QPointF(position),
+        button,
+        buttons,
+        QtCore.Qt.NoModifier,
+    )
+    QtWidgets.QApplication.sendEvent(widget, event)
+    assert event.isAccepted()
+
+
+def _size(widget):
+    return widget.width(), widget.height()
+
+
+class UnresolvableSnapModel(SelectorModel):
+    SNAPPED = np.array([0.25, 0.04, -0.02], dtype=float)
+
+    def color_at_position(self, position, size):
+        if tuple(position) == (1.0, 1.0):
+            return np.array([0.20, 0.01, 0.00], dtype=float)
+        return None
+
+    def selection_at_position(self, position, size):
+        colour = self.color_at_position(position, size)
+        if colour is None:
+            return None
+        lch = color_math.oklab_to_oklch(colour)
+        return SelectorSelection(
+            (float(lch[0]), float(lch[1]), float(lch[2])),
+            (float(position[0]), float(position[1])),
+        )
+
+    def colors_at_positions(self, x, y, size):
+        x = np.asarray(x)
+        return np.zeros(x.shape + (3,), dtype=float), np.zeros_like(x, dtype=bool)
+
+    def position_for_intent(self, lch, size):
+        return None
+
+    def snapped_selector_selection_at_position(self, position, size):
+        lch = color_math.oklab_to_oklch(self.SNAPPED)
+        return SelectorSelection(
+            (float(lch[0]), float(lch[1]), float(lch[2])),
+            (float(position[0]), float(position[1])),
+        )

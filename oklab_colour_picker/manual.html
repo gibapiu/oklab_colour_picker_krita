@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OKLab Colour Selector</title>
+<style>
+  body { font-family: sans-serif; line-height: 1.45; max-width: 38em; }
+  h1 { margin-top: 0; }
+  h2 { margin-top: 1.3em; }
+  code { background: rgba(127,127,127,0.18); padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<h1>OKLab Colour Selector</h1>
+
+<p>A perceptual colour picker for Krita built on the OKLab colour space.
+Pick by lightness, chroma and hue and get perceptually equal selection both with sliders and on the picker.</p>
+
+<h2>Why OKLCH?</h2>
+
+<p>Regular HSV/HSL are fundamentally flawed sRGB representation, not perceptionally even. The same
+slider distance can result in a tiny nudge in perception in one place and a jump in another,
+and lightness shifts when you only meant to change hue.</p>
+
+<p>OKLab was designed around how we actually see colour. In practice that means:</p>
+<ul>
+  <li>Hue changes keep the same perceived lightness.</li>
+  <li>Lightness changes don't shift hue.</li>
+  <li>Equal slider steps feel like equal visual steps.</li>
+</ul>
+<p>Good for building palettes, shading, and matching tones without fighting the
+picker. Background:
+<a href="https://bottosson.github.io/posts/oklab/">A perceptual colour space
+for image processing</a> by Björn Ottosson (2020).</p>
+
+<h2>Tabs</h2>
+
+<p>Each tab fixes one axis and lets you pick the other two on a 2D slice:</p>
+<ul>
+  <li><b>Hue / Chroma</b> &mdash; at a fixed lightness.</li>
+  <li><b>Hue / Lightness</b> &mdash; at a fixed chroma.</li>
+  <li><b>Lightness / Chroma</b> &mdash; at a fixed hue.</li>
+</ul>
+<p>The fixed axis is the one you control with the matching L, C, or H slider
+underneath.</p>
+
+<h2>Picking</h2>
+<ul>
+  <li><b>Drag</b> to preview, <b>release</b> to commit to the foreground colour.</li>
+  <li>Use the <b>L, C, H sliders</b> or number boxes for precise values.</li>
+  <li>Type a <b>hex</b> value into the swatch (with or without <code>#</code>).</li>
+  <li>The arrow on the swatch <b>reverts</b> to the previous colour.</li>
+</ul>
+
+<h2>Out of Gamut</h2>
+<p>Since color slices are not equal, sometimes there are no equivalent colors when moving on different axes. If your pick sits outside
+the gamut, the swatch shows <b>&#9888;</b> and the committed colour is
+clipped to the closest in-gamut neighbour.</p>
+
+</body>
+</html>
