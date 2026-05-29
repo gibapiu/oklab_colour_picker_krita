@@ -1,4 +1,4 @@
-# OKLab Colour Selector for Krita
+# OKLab Colour Picker for Krita
 
   ![Krita 5.2+](https://img.shields.io/badge/Krita-5.2%2B-3babff)
   ![License: MIT](https://img.shields.io/badge/License-MIT-green)
