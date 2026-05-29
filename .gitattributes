@@ -4,10 +4,11 @@
 .githooks/ export-ignore
 
 # Exclude docs, dev scripts and tests
+assets/ export-ignore
 docs/ export-ignore
 tests/ export-ignore
 scripts/ export-ignore
 pytest.ini export-ignore
 requirements-dev.txt export-ignore
 README.md export-ignore
-LICENSE.md export-ignore
+LICENSE export-ignore

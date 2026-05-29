@@ -1,0 +1,28 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'          # release tag format: v1.0.0
+
+permissions:
+  contents: write     
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build flat zip
+        run: |
+          git archive --format=zip \
+            -o oklab_colour_picker-${{ github.ref_name }}.zip \
+            ${{ github.ref_name }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: OKLab Colour Picker ${{ github.ref_name }}
+          generate_release_notes: true
+          files: oklab_colour_picker-*.zip

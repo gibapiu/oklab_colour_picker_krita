@@ -1,5 +1,9 @@
 # OKLab Colour Selector for Krita
 
+  ![Krita 5.2+](https://img.shields.io/badge/Krita-5.2%2B-3babff)
+  ![License: MIT](https://img.shields.io/badge/License-MIT-green)
+  [![Latest release](https://img.shields.io/badge/release-v1.2.1-orange)](https://github.com/gibapiu/oklab_colour_picker_krita/releases/latest)
+
 A perceptual colour picker for Krita, built on OKLab / OKLCh.
 Pick with lightness, chroma and hue sliders and get perceptually uniform results.
 
@@ -20,12 +24,25 @@ OKLab was introduced by [Björn Ottosson](https://bottosson.github.io/posts/okla
 - Swatch with hex entry and a one-click revert to the previous colour.
 - Out-of-gamut indicator so you always know when sRGB can't reach your pick.
 
+<table>
+    <tr>
+        <td width="33%" valign="top"><b>Hue/Chroma tab</b></td>
+        <td width="33%" valign="top"><b>Hue / Lightness tab</b></td>
+        <td width="33%" valign="top"><b>Lightness / Chroma tab</b></td>
+    </tr>
+    <tr>
+        <td><img src="./assets/picker_01.png" alt="Hue/Chroma tab screenshot" /></td>
+        <td><img src="./assets/picker_02.png" alt="Hue / Lightness tab screenshot" /></td>
+        <td><img src="./assets/picker_03.png" alt="Lightness / Chroma tab screenshot" /></td>
+    </tr>
+</table>
+
 ## Install
 
 Needs Krita 5.2+ and NumPy in Krita's Python.
 
 1. [Download latest release](https://github.com/gibapiu/oklab_colour_picker_krita/releases/latest) as ZIP.
-2. In Krita select Tools&rarrScripts&rarrImport Python Plugin From File.
+2. In Krita select **Tools &rarr; Scripts &rarr; Import Python Plugin From File**.
 3. Restart Krita.
 4. Open **Settings &rarr; Dockers &rarr; OKLab Colour Selector**.
 5. Proceed with the dependencies installation.
