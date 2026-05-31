@@ -37,6 +37,9 @@ OKLab was introduced by [Björn Ottosson](https://bottosson.github.io/posts/okla
     </tr>
 </table>
 
+A video explaining the plugin:
+[![Watch the video](https://img.youtube.com/vi/fSnltHozDcU/maxresdefault.jpg)](https://www.youtube.com/watch?v=fSnltHozDcU)
+
 ## Install
 
 Needs Krita 5.2+ and NumPy in Krita's Python.
