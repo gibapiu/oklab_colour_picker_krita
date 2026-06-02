@@ -1,19 +1,32 @@
 import subprocess
 from pathlib import Path
 
-import pytest
-
 from oklab_colour_picker import dependency_bootstrap
 
 
 KRITA_PYTHON = "/fake/krita/bin/python.exe"
+PIP_WHEEL = Path("/fake/pip-25.1.1-py3-none-any.whl")
 
 
 def _completed(args, returncode=0, stdout="", stderr=""):
     return subprocess.CompletedProcess(args, returncode, stdout=stdout, stderr=stderr)
 
 
-def test_install_numpy_invokes_krita_python_with_target_and_upgrade(tmp_path, monkeypatch):
+def _pip_args(tmp_path):
+    return [
+        "--isolated",
+        "--no-input",
+        "--disable-pip-version-check",
+        "install",
+        "--upgrade",
+        "--only-binary=:all:",
+        "--target",
+        str(tmp_path),
+        dependency_bootstrap.NUMPY_REQUIREMENT,
+    ]
+
+
+def test_install_numpy_invokes_krita_python_with_isolated_pip_wheel(tmp_path, monkeypatch):
     calls = []
 
     def fake_run(args, **kwargs):
@@ -21,7 +34,7 @@ def test_install_numpy_invokes_krita_python_with_target_and_upgrade(tmp_path, mo
         return _completed(args, returncode=0, stdout="ok")
 
     monkeypatch.setattr(dependency_bootstrap, "find_krita_python", lambda: KRITA_PYTHON)
-    monkeypatch.setattr(dependency_bootstrap, "_ensure_pip_available_subprocess", lambda _python: True)
+    monkeypatch.setattr(dependency_bootstrap, "_get_or_download_pip_wheel", lambda _vendor_path: PIP_WHEEL)
     monkeypatch.setattr(dependency_bootstrap.subprocess, "run", fake_run)
 
     result = dependency_bootstrap.install_numpy(str(tmp_path))
@@ -31,14 +44,11 @@ def test_install_numpy_invokes_krita_python_with_target_and_upgrade(tmp_path, mo
         (
             [
                 KRITA_PYTHON,
-                "-m",
-                "pip",
-                "install",
-                "--upgrade",
-                "--only-binary=:all:",
-                "--target",
-                str(tmp_path),
-                dependency_bootstrap.NUMPY_REQUIREMENT,
+                "-I",
+                "-c",
+                dependency_bootstrap._PIP_WHEEL_INSTALL_SCRIPT,
+                str(PIP_WHEEL),
+                *_pip_args(tmp_path),
             ],
             {
                 "check": False,
@@ -52,35 +62,25 @@ def test_install_numpy_invokes_krita_python_with_target_and_upgrade(tmp_path, mo
 
 def test_install_numpy_falls_back_to_in_process_when_no_python_executable(tmp_path, monkeypatch):
     monkeypatch.setattr(dependency_bootstrap, "find_krita_python", lambda: None)
-    monkeypatch.setattr(dependency_bootstrap, "_ensure_pip_available_in_process", lambda: True)
+    monkeypatch.setattr(dependency_bootstrap, "_get_or_download_pip_wheel", lambda _vendor_path: PIP_WHEEL)
 
     captured = []
     monkeypatch.setattr(
         dependency_bootstrap,
-        "_run_pip_in_process",
-        lambda argv: captured.append(argv) or 0,
+        "_run_pip_wheel_in_process",
+        lambda pip_wheel, argv: captured.append((pip_wheel, argv)) or 0,
     )
 
     result = dependency_bootstrap.install_numpy(str(tmp_path))
 
     assert result.success is True
-    assert captured == [
-        [
-            "pip",
-            "install",
-            "--upgrade",
-            "--only-binary=:all:",
-            "--target",
-            str(tmp_path),
-            dependency_bootstrap.NUMPY_REQUIREMENT,
-        ]
-    ]
+    assert captured == [(PIP_WHEEL, _pip_args(tmp_path))]
 
 
 def test_install_numpy_in_process_reports_pip_exit_code(tmp_path, monkeypatch):
     monkeypatch.setattr(dependency_bootstrap, "find_krita_python", lambda: None)
-    monkeypatch.setattr(dependency_bootstrap, "_ensure_pip_available_in_process", lambda: True)
-    monkeypatch.setattr(dependency_bootstrap, "_run_pip_in_process", lambda _argv: 2)
+    monkeypatch.setattr(dependency_bootstrap, "_get_or_download_pip_wheel", lambda _vendor_path: PIP_WHEEL)
+    monkeypatch.setattr(dependency_bootstrap, "_run_pip_wheel_in_process", lambda _pip_wheel, _argv: 2)
 
     result = dependency_bootstrap.install_numpy(str(tmp_path))
 
@@ -88,14 +88,18 @@ def test_install_numpy_in_process_reports_pip_exit_code(tmp_path, monkeypatch):
     assert "status 2" in result.message
 
 
-def test_install_numpy_in_process_reports_missing_pip(tmp_path, monkeypatch):
+def test_install_numpy_reports_pip_bootstrap_error(tmp_path, monkeypatch):
     monkeypatch.setattr(dependency_bootstrap, "find_krita_python", lambda: None)
-    monkeypatch.setattr(dependency_bootstrap, "_ensure_pip_available_in_process", lambda: False)
+    monkeypatch.setattr(
+        dependency_bootstrap,
+        "_get_or_download_pip_wheel",
+        lambda _vendor_path: (_ for _ in ()).throw(dependency_bootstrap.PipBootstrapError("could not fetch pip")),
+    )
 
     result = dependency_bootstrap.install_numpy(str(tmp_path))
 
     assert result.success is False
-    assert "ensurepip" in result.message
+    assert "could not fetch pip" in result.message
 
 
 def test_install_numpy_surfaces_pip_stderr_on_failure(tmp_path, monkeypatch):
@@ -103,7 +107,7 @@ def test_install_numpy_surfaces_pip_stderr_on_failure(tmp_path, monkeypatch):
         return _completed(args, returncode=1, stderr="ERROR: no matching wheel")
 
     monkeypatch.setattr(dependency_bootstrap, "find_krita_python", lambda: KRITA_PYTHON)
-    monkeypatch.setattr(dependency_bootstrap, "_ensure_pip_available_subprocess", lambda _python: True)
+    monkeypatch.setattr(dependency_bootstrap, "_get_or_download_pip_wheel", lambda _vendor_path: PIP_WHEEL)
     monkeypatch.setattr(dependency_bootstrap.subprocess, "run", fake_run)
 
     result = dependency_bootstrap.install_numpy(str(tmp_path))
@@ -117,7 +121,7 @@ def test_install_numpy_reports_timeout(tmp_path, monkeypatch):
         raise subprocess.TimeoutExpired(args, kwargs.get("timeout", 0))
 
     monkeypatch.setattr(dependency_bootstrap, "find_krita_python", lambda: KRITA_PYTHON)
-    monkeypatch.setattr(dependency_bootstrap, "_ensure_pip_available_subprocess", lambda _python: True)
+    monkeypatch.setattr(dependency_bootstrap, "_get_or_download_pip_wheel", lambda _vendor_path: PIP_WHEEL)
     monkeypatch.setattr(dependency_bootstrap.subprocess, "run", fake_run)
 
     result = dependency_bootstrap.install_numpy(str(tmp_path))
@@ -126,27 +130,31 @@ def test_install_numpy_reports_timeout(tmp_path, monkeypatch):
     assert "timed out" in result.message.lower()
 
 
-def test_install_numpy_falls_through_when_subprocess_pip_bootstrap_fails(tmp_path, monkeypatch):
+def test_install_numpy_falls_through_when_subprocess_interpreter_fails(tmp_path, monkeypatch):
     monkeypatch.setattr(dependency_bootstrap, "find_krita_python", lambda: KRITA_PYTHON)
-    monkeypatch.setattr(dependency_bootstrap, "_ensure_pip_available_subprocess", lambda _python: False)
-    monkeypatch.setattr(dependency_bootstrap, "_ensure_pip_available_in_process", lambda: True)
+    monkeypatch.setattr(dependency_bootstrap, "_get_or_download_pip_wheel", lambda _vendor_path: PIP_WHEEL)
+    monkeypatch.setattr(
+        dependency_bootstrap.subprocess,
+        "run",
+        lambda _args, **_kwargs: (_ for _ in ()).throw(OSError("interpreter failed")),
+    )
 
     captured = []
     monkeypatch.setattr(
         dependency_bootstrap,
-        "_run_pip_in_process",
-        lambda argv: captured.append(argv) or 0,
+        "_run_pip_wheel_in_process",
+        lambda pip_wheel, argv: captured.append((pip_wheel, argv)) or 0,
     )
 
     result = dependency_bootstrap.install_numpy(str(tmp_path))
 
     assert result.success is True
-    assert captured and captured[0][0] == "pip"
+    assert captured == [(PIP_WHEEL, _pip_args(tmp_path))]
 
 
 def test_install_numpy_does_not_retry_in_process_after_pip_install_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(dependency_bootstrap, "find_krita_python", lambda: KRITA_PYTHON)
-    monkeypatch.setattr(dependency_bootstrap, "_ensure_pip_available_subprocess", lambda _python: True)
+    monkeypatch.setattr(dependency_bootstrap, "_get_or_download_pip_wheel", lambda _vendor_path: PIP_WHEEL)
     monkeypatch.setattr(
         dependency_bootstrap.subprocess,
         "run",
@@ -167,35 +175,52 @@ def test_install_numpy_does_not_retry_in_process_after_pip_install_failure(tmp_p
     assert in_process_called == []
 
 
-def test_ensure_pip_available_subprocess_short_circuits_when_pip_imports(monkeypatch):
-    calls = []
+def test_get_or_download_pip_wheel_reuses_existing_wheel(tmp_path):
+    vendor_path = tmp_path / "site-packages"
+    wheel_dir = tmp_path / dependency_bootstrap.PIP_WHEEL_DIRECTORY_NAME
+    wheel_dir.mkdir()
+    wheel = wheel_dir / "pip-25.1.1-py3-none-any.whl"
+    wheel.write_bytes(b"wheel")
 
-    def fake_run(args, **kwargs):
-        calls.append(args)
-        return _completed(args, returncode=0)
-
-    monkeypatch.setattr(dependency_bootstrap.subprocess, "run", fake_run)
-
-    assert dependency_bootstrap._ensure_pip_available_subprocess(KRITA_PYTHON) is True
-    assert len(calls) == 1
-    assert calls[0][1:] == ["-c", "import pip"]
+    assert dependency_bootstrap._get_or_download_pip_wheel(str(vendor_path)) == wheel
 
 
-def test_ensure_pip_available_subprocess_runs_ensurepip_when_pip_missing(monkeypatch):
-    calls = []
+def test_run_pip_wheel_in_process_front_loads_wheel_and_restores_global_state(monkeypatch):
+    original_argv = dependency_bootstrap.sys.argv
+    original_exit = dependency_bootstrap.sys.exit
+    original_path = dependency_bootstrap.sys.path[:]
+    original_pip_modules = {
+        module_name: module
+        for module_name, module in dependency_bootstrap.sys.modules.items()
+        if module_name == "pip" or module_name.startswith("pip.")
+    }
+    dependency_bootstrap.sys.modules["pip"] = object()
+    dependency_bootstrap.sys.modules["pip._vendor"] = object()
+    captured = []
 
-    def fake_run(args, **kwargs):
-        calls.append(args)
-        if "ensurepip" in args:
-            return _completed(args, returncode=0)
-        if calls.count(args) == 1:
-            return _completed(args, returncode=1)
-        return _completed(args, returncode=0)
+    def fake_run_module(module, run_name):
+        captured.append((module, run_name, dependency_bootstrap.sys.path[0], dependency_bootstrap.sys.argv[:]))
+        assert "pip" not in dependency_bootstrap.sys.modules
+        assert "pip._vendor" not in dependency_bootstrap.sys.modules
+        raise SystemExit(0)
 
-    monkeypatch.setattr(dependency_bootstrap.subprocess, "run", fake_run)
+    monkeypatch.setattr(dependency_bootstrap.runpy, "run_module", fake_run_module)
 
-    assert dependency_bootstrap._ensure_pip_available_subprocess(KRITA_PYTHON) is True
-    assert any("ensurepip" in args for args in calls)
+    try:
+        result = dependency_bootstrap._run_pip_wheel_in_process(PIP_WHEEL, ["install", "numpy"])
+
+        assert result == 0
+        assert captured == [("pip", "__main__", str(PIP_WHEEL), ["pip", "install", "numpy"])]
+        assert "pip" not in dependency_bootstrap.sys.modules
+        assert "pip._vendor" not in dependency_bootstrap.sys.modules
+        assert dependency_bootstrap.sys.argv is original_argv
+        assert dependency_bootstrap.sys.exit is original_exit
+        assert dependency_bootstrap.sys.path == original_path
+    finally:
+        for module_name in list(dependency_bootstrap.sys.modules):
+            if module_name == "pip" or module_name.startswith("pip."):
+                dependency_bootstrap.sys.modules.pop(module_name, None)
+        dependency_bootstrap.sys.modules.update(original_pip_modules)
 
 
 def test_find_krita_python_uses_sys_executable_when_already_python(monkeypatch):

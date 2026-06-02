@@ -194,8 +194,8 @@ def _build_missing_dependency_widget(
             "Install NumPy",
             "This will use Krita's bundled Python to download NumPy from PyPI into Krita's app data:\n\n"
             f"{vendor_path}\n\n"
-            "If pip is missing, it will first be bootstrapped into Krita's Python "
-            "via `ensurepip` before NumPy is installed into the folder above.\n\n"
+            "A pip wheel will be downloaded and used only for this installation "
+            "before NumPy is installed into the folder above.\n\n"
             "Restart Krita after installation.",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
             QtWidgets.QMessageBox.No,
