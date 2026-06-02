@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 import runpy
@@ -15,12 +16,15 @@ from urllib.parse import urlparse
 
 
 NUMPY_REQUIREMENT = "numpy>=1.26,<3"
+
 PIP_PROJECT_METADATA_URL = "https://pypi.org/pypi/pip/json"
 PIP_WHEEL_DIRECTORY_NAME = "pip-wheel"
 PIP_DOWNLOAD_TIMEOUT_SECONDS = 120
 PIP_INSTALL_TIMEOUT_SECONDS = 600
+
 _PIP_MODULE_PREFIX = "pip."
 _PIP_RUN_LOCK = threading.RLock()
+
 _PIP_WHEEL_INSTALL_SCRIPT = """
 import runpy
 import sys
@@ -88,9 +92,10 @@ def find_krita_python() -> str | None:
 def _install_via_subprocess(python: str, vendor_path: str, requirement: str) -> InstallResult | None:
     """Run an explicit pip wheel via the discovered interpreter.
 
-    The ``-I`` flag keeps Krita's Python from importing host Python packages
-    such as Arch's system pip. Returns ``None`` only when the interpreter cannot
-    be exercised, so the caller can fall back to the in-process path.
+    Runs in isolated mode (``-I``) so the interpreter ignores ``PYTHONPATH`` and
+    user-site, and the install script's ``sys.path[0]`` wheel wins over any
+    leaked host pip (Issue #1). Returns ``None`` only when the interpreter
+    cannot be exercised, so the caller can fall back to the in-process path.
     """
     try:
         pip_wheel = _get_or_download_pip_wheel(vendor_path)
@@ -166,48 +171,60 @@ class PipBootstrapError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class _PipWheel:
+    url: str
+    filename: str
+    sha256: str | None
+
+
 def _get_or_download_pip_wheel(vendor_path: str) -> Path:
     wheel_dir = Path(vendor_path).parent / PIP_WHEEL_DIRECTORY_NAME
     wheel_dir.mkdir(parents=True, exist_ok=True)
 
-    existing = sorted(
+    cached = sorted(
         wheel_dir.glob("pip-*.whl"),
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )
-    if existing:
-        return existing[0]
+    if cached:
+        return cached[0]
 
-    wheel_url = _latest_pip_wheel_url()
-    wheel_name = Path(urlparse(wheel_url).path).name
-    if not wheel_name:
-        raise PipBootstrapError("Could not determine the pip wheel filename from PyPI.")
+    wheel = _latest_pip_wheel(_fetch_pip_metadata())
+    wheel_bytes = _download(wheel.url)
+    if wheel.sha256 and hashlib.sha256(wheel_bytes).hexdigest() != wheel.sha256:
+        raise PipBootstrapError("Downloaded pip wheel failed its PyPI sha256 check.")
 
-    try:
-        with request.urlopen(wheel_url, timeout=PIP_DOWNLOAD_TIMEOUT_SECONDS) as response:
-            wheel_bytes = response.read()
-    except (OSError, URLError) as exc:
-        raise PipBootstrapError(f"Could not download pip from PyPI: {exc}") from exc
-
-    wheel_path = wheel_dir / wheel_name
-    temporary_wheel_path = wheel_path.with_suffix(f"{wheel_path.suffix}.tmp")
-    temporary_wheel_path.write_bytes(wheel_bytes)
-    temporary_wheel_path.replace(wheel_path)
+    wheel_path = wheel_dir / wheel.filename
+    temporary_path = wheel_path.with_suffix(f"{wheel_path.suffix}.tmp")
+    temporary_path.write_bytes(wheel_bytes)
+    temporary_path.replace(wheel_path)
     return wheel_path
 
 
-def _latest_pip_wheel_url() -> str:
+def _fetch_pip_metadata() -> dict:
     try:
         with request.urlopen(PIP_PROJECT_METADATA_URL, timeout=PIP_DOWNLOAD_TIMEOUT_SECONDS) as response:
-            metadata = json.loads(response.read().decode("utf-8"))
+            return json.loads(response.read().decode("utf-8"))
     except (OSError, URLError, json.JSONDecodeError) as exc:
         raise PipBootstrapError(f"Could not fetch pip metadata from PyPI: {exc}") from exc
 
-    for package in metadata.get("urls", []):
-        if package.get("packagetype") == "bdist_wheel":
-            url = package.get("url")
+
+def _download(url: str) -> bytes:
+    try:
+        with request.urlopen(url, timeout=PIP_DOWNLOAD_TIMEOUT_SECONDS) as response:
+            return response.read()
+    except (OSError, URLError) as exc:
+        raise PipBootstrapError(f"Could not download pip from PyPI: {exc}") from exc
+
+
+def _latest_pip_wheel(metadata: dict) -> _PipWheel:
+    for file in metadata.get("urls", []):
+        if file.get("packagetype") == "bdist_wheel":
+            url = file.get("url")
             if isinstance(url, str) and url:
-                return url
+                filename = file.get("filename") or Path(urlparse(url).path).name
+                return _PipWheel(url, filename, (file.get("digests") or {}).get("sha256"))
 
     raise PipBootstrapError("PyPI did not return a pip wheel download URL.")
 
@@ -217,6 +234,11 @@ def _run_pip_wheel_in_process(pip_wheel: Path, argv: list[str]) -> int:
         original_argv = sys.argv
         original_exit = sys.exit
         original_path = sys.path[:]
+        original_pip_modules = {
+            module_name: module
+            for module_name, module in sys.modules.items()
+            if module_name == "pip" or module_name.startswith(_PIP_MODULE_PREFIX)
+        }
 
         def _exit(code=0):
             raise SystemExit(code)
@@ -236,7 +258,9 @@ def _run_pip_wheel_in_process(pip_wheel: Path, argv: list[str]) -> int:
                 return 1
             return 0
         finally:
+            # Drop the wheel's pip modules and restore any that pre-existed.
             _clear_pip_modules()
+            sys.modules.update(original_pip_modules)
             sys.path[:] = original_path
             sys.argv = original_argv
             sys.exit = original_exit

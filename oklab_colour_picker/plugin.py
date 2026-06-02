@@ -141,12 +141,6 @@ def _build_missing_dependency_widget(
     label.setWordWrap(True)
     layout.addWidget(label)
 
-    path_label = QtWidgets.QLabel(vendor_path)
-    path_label.setAlignment(QtCore.Qt.AlignCenter)
-    path_label.setWordWrap(True)
-    path_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
-    layout.addWidget(path_label)
-
     button = QtWidgets.QPushButton("Install NumPy")
     button.setObjectName("oklab-install-numpy")
     layout.addWidget(button, alignment=QtCore.Qt.AlignCenter)
@@ -192,10 +186,8 @@ def _build_missing_dependency_widget(
         response = QtWidgets.QMessageBox.question(
             widget,
             "Install NumPy",
-            "This will use Krita's bundled Python to download NumPy from PyPI into Krita's app data:\n\n"
-            f"{vendor_path}\n\n"
-            "A pip wheel will be downloaded and used only for this installation "
-            "before NumPy is installed into the folder above.\n\n"
+            "Install NumPy for OKLab Colour Selector?\n\n"
+            "Krita will download NumPy from PyPI and install it into the plugin's private dependency folder.\n\n"
             "Restart Krita after installation.",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
             QtWidgets.QMessageBox.No,

@@ -1,5 +1,8 @@
+import os
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from oklab_colour_picker import dependency_bootstrap
 
@@ -175,7 +178,34 @@ def test_install_numpy_does_not_retry_in_process_after_pip_install_failure(tmp_p
     assert in_process_called == []
 
 
-def test_get_or_download_pip_wheel_reuses_existing_wheel(tmp_path):
+def _stub_urlopen(monkeypatch, payload):
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return payload
+
+    monkeypatch.setattr(dependency_bootstrap.request, "urlopen", lambda *a, **k: _Response())
+
+
+def _metadata(filename, sha256):
+    return {
+        "urls": [
+            {
+                "packagetype": "bdist_wheel",
+                "filename": filename,
+                "url": f"https://pypi.org/x/{filename}",
+                "digests": {"sha256": sha256},
+            }
+        ],
+    }
+
+
+def test_get_or_download_pip_wheel_reuses_cached_wheel(tmp_path):
     vendor_path = tmp_path / "site-packages"
     wheel_dir = tmp_path / dependency_bootstrap.PIP_WHEEL_DIRECTORY_NAME
     wheel_dir.mkdir()
@@ -185,17 +215,58 @@ def test_get_or_download_pip_wheel_reuses_existing_wheel(tmp_path):
     assert dependency_bootstrap._get_or_download_pip_wheel(str(vendor_path)) == wheel
 
 
+def test_get_or_download_pip_wheel_reuses_most_recent_cached_wheel(tmp_path):
+    vendor_path = tmp_path / "site-packages"
+    wheel_dir = tmp_path / dependency_bootstrap.PIP_WHEEL_DIRECTORY_NAME
+    wheel_dir.mkdir()
+    older_wheel = wheel_dir / "pip-24.0-py3-none-any.whl"
+    newer_wheel = wheel_dir / "pip-25.1.1-py3-none-any.whl"
+    older_wheel.write_bytes(b"older")
+    newer_wheel.write_bytes(b"newer")
+    os.utime(older_wheel, (100, 100))
+    os.utime(newer_wheel, (200, 200))
+
+    assert dependency_bootstrap._get_or_download_pip_wheel(str(vendor_path)) == newer_wheel
+
+
+def test_get_or_download_pip_wheel_downloads_and_verifies(tmp_path, monkeypatch):
+    import hashlib
+
+    payload = b"verified wheel bytes"
+    metadata = _metadata("pip-26.0-py3-none-any.whl", hashlib.sha256(payload).hexdigest())
+    monkeypatch.setattr(dependency_bootstrap, "_fetch_pip_metadata", lambda: metadata)
+    _stub_urlopen(monkeypatch, payload)
+
+    result = dependency_bootstrap._get_or_download_pip_wheel(str(tmp_path / "site-packages"))
+
+    assert result.name == "pip-26.0-py3-none-any.whl"
+    assert result.read_bytes() == payload
+
+
+def test_get_or_download_pip_wheel_rejects_bad_digest(tmp_path, monkeypatch):
+    metadata = _metadata("pip-26.0-py3-none-any.whl", "0" * 64)
+    monkeypatch.setattr(dependency_bootstrap, "_fetch_pip_metadata", lambda: metadata)
+    _stub_urlopen(monkeypatch, b"tampered")
+
+    with pytest.raises(dependency_bootstrap.PipBootstrapError, match="sha256"):
+        dependency_bootstrap._get_or_download_pip_wheel(str(tmp_path / "site-packages"))
+
+
 def test_run_pip_wheel_in_process_front_loads_wheel_and_restores_global_state(monkeypatch):
     original_argv = dependency_bootstrap.sys.argv
     original_exit = dependency_bootstrap.sys.exit
     original_path = dependency_bootstrap.sys.path[:]
-    original_pip_modules = {
+    saved_pip_modules = {
         module_name: module
         for module_name, module in dependency_bootstrap.sys.modules.items()
         if module_name == "pip" or module_name.startswith("pip.")
     }
-    dependency_bootstrap.sys.modules["pip"] = object()
-    dependency_bootstrap.sys.modules["pip._vendor"] = object()
+    # Stand in for a host pip already imported into the process; it must be
+    # cleared while the wheel runs and then restored afterwards.
+    host_pip = object()
+    host_pip_vendor = object()
+    dependency_bootstrap.sys.modules["pip"] = host_pip
+    dependency_bootstrap.sys.modules["pip._vendor"] = host_pip_vendor
     captured = []
 
     def fake_run_module(module, run_name):
@@ -211,8 +282,9 @@ def test_run_pip_wheel_in_process_front_loads_wheel_and_restores_global_state(mo
 
         assert result == 0
         assert captured == [("pip", "__main__", str(PIP_WHEEL), ["pip", "install", "numpy"])]
-        assert "pip" not in dependency_bootstrap.sys.modules
-        assert "pip._vendor" not in dependency_bootstrap.sys.modules
+        # The pre-existing host pip modules are put back exactly as they were.
+        assert dependency_bootstrap.sys.modules["pip"] is host_pip
+        assert dependency_bootstrap.sys.modules["pip._vendor"] is host_pip_vendor
         assert dependency_bootstrap.sys.argv is original_argv
         assert dependency_bootstrap.sys.exit is original_exit
         assert dependency_bootstrap.sys.path == original_path
@@ -220,7 +292,7 @@ def test_run_pip_wheel_in_process_front_loads_wheel_and_restores_global_state(mo
         for module_name in list(dependency_bootstrap.sys.modules):
             if module_name == "pip" or module_name.startswith("pip."):
                 dependency_bootstrap.sys.modules.pop(module_name, None)
-        dependency_bootstrap.sys.modules.update(original_pip_modules)
+        dependency_bootstrap.sys.modules.update(saved_pip_modules)
 
 
 def test_find_krita_python_uses_sys_executable_when_already_python(monkeypatch):
