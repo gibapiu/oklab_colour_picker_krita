@@ -830,7 +830,13 @@ def test_install_numpy_action_requires_confirmation(qtbot, monkeypatch, tmp_path
 
     fake_dock.__getattr__ = _raise_numpy_missing
     monkeypatch.setitem(sys.modules, "oklab_colour_picker.dock", fake_dock)
-    monkeypatch.setattr(QtWidgets.QMessageBox, "question", lambda *args, **kwargs: QtWidgets.QMessageBox.No)
+    captured_messages = []
+
+    def reject_install(parent, title, message, *args, **kwargs):
+        captured_messages.append(message)
+        return QtWidgets.QMessageBox.No
+
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question", reject_install)
     installer_calls = []
 
     dock_class = create_dock_widget_class(
@@ -845,6 +851,10 @@ def test_install_numpy_action_requires_confirmation(qtbot, monkeypatch, tmp_path
     qtbot.mouseClick(button, QtCore.Qt.LeftButton)
 
     assert installer_calls == []
+    expected_vendor = str(tmp_path / plugin_module.VENDOR_ROOT_DIRECTORY_NAME / plugin_module.VENDOR_SITE_PACKAGES_DIRECTORY_NAME)
+    assert captured_messages
+    assert expected_vendor not in captured_messages[0]
+    assert "private dependency folder" in captured_messages[0]
 
 
 def test_install_numpy_action_runs_installer_when_confirmed(qtbot, monkeypatch, tmp_path):
