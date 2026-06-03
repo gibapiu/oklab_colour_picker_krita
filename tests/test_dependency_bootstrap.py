@@ -1,5 +1,7 @@
-import os
+import hashlib
+import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -61,6 +63,47 @@ def test_install_numpy_invokes_krita_python_with_isolated_pip_wheel(tmp_path, mo
             },
         )
     ]
+
+
+def test_install_via_subprocess_runs_explicit_pip_wheel_script(tmp_path, monkeypatch):
+    vendor_path = tmp_path / "site-packages"
+    fake_wheel = tmp_path / "pip-25.1.1-py3-none-any.whl"
+    fake_pip = fake_wheel / "pip"
+    fake_pip.mkdir(parents=True)
+    (fake_pip / "__init__.py").write_text("", encoding="utf-8")
+    fake_pip_main = fake_pip / "__main__.py"
+    fake_pip_main.write_text(
+        """
+import json
+import pathlib
+import sys
+
+target_path = pathlib.Path(sys.argv[sys.argv.index("--target") + 1])
+target_path.mkdir(parents=True, exist_ok=True)
+(target_path.parent / "pip-subprocess-observed.json").write_text(
+    json.dumps({"argv": sys.argv, "path0": sys.path[0]}),
+    encoding="utf-8",
+)
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(dependency_bootstrap, "_get_or_download_pip_wheel", lambda _vendor_path: fake_wheel)
+
+    result = dependency_bootstrap._install_via_subprocess(
+        sys.executable,
+        str(vendor_path),
+        dependency_bootstrap.NUMPY_REQUIREMENT,
+    )
+
+    observed = json.loads((tmp_path / "pip-subprocess-observed.json").read_text(encoding="utf-8"))
+    assert result == dependency_bootstrap.InstallResult(
+        True,
+        "NumPy installed. Restart Krita to load the colour selector.",
+    )
+    assert observed == {
+        "argv": ["pip", *_pip_args(vendor_path)],
+        "path0": str(fake_wheel),
+    }
 
 
 def test_install_numpy_falls_back_to_in_process_when_no_python_executable(tmp_path, monkeypatch):
@@ -205,36 +248,73 @@ def _metadata(filename, sha256):
     }
 
 
-def test_get_or_download_pip_wheel_reuses_cached_wheel(tmp_path):
+def _metadata_for_payload(filename, payload):
+    return _metadata(filename, hashlib.sha256(payload).hexdigest())
+
+
+def test_get_or_download_pip_wheel_reuses_verified_cached_wheel(tmp_path, monkeypatch):
     vendor_path = tmp_path / "site-packages"
     wheel_dir = tmp_path / dependency_bootstrap.PIP_WHEEL_DIRECTORY_NAME
     wheel_dir.mkdir()
     wheel = wheel_dir / "pip-25.1.1-py3-none-any.whl"
-    wheel.write_bytes(b"wheel")
+    payload = b"verified wheel"
+    wheel.write_bytes(payload)
+    monkeypatch.setattr(
+        dependency_bootstrap,
+        "_fetch_pip_metadata",
+        lambda: _metadata_for_payload(wheel.name, payload),
+    )
+    monkeypatch.setattr(
+        dependency_bootstrap,
+        "_download",
+        lambda _url: (_ for _ in ()).throw(AssertionError("unexpected download")),
+    )
 
     assert dependency_bootstrap._get_or_download_pip_wheel(str(vendor_path)) == wheel
 
 
-def test_get_or_download_pip_wheel_reuses_most_recent_cached_wheel(tmp_path):
+def test_get_or_download_pip_wheel_replaces_bad_cached_wheel(tmp_path, monkeypatch):
     vendor_path = tmp_path / "site-packages"
     wheel_dir = tmp_path / dependency_bootstrap.PIP_WHEEL_DIRECTORY_NAME
     wheel_dir.mkdir()
-    older_wheel = wheel_dir / "pip-24.0-py3-none-any.whl"
-    newer_wheel = wheel_dir / "pip-25.1.1-py3-none-any.whl"
-    older_wheel.write_bytes(b"older")
-    newer_wheel.write_bytes(b"newer")
-    os.utime(older_wheel, (100, 100))
-    os.utime(newer_wheel, (200, 200))
+    wheel = wheel_dir / "pip-25.1.1-py3-none-any.whl"
+    wheel.write_bytes(b"planted wheel")
+    payload = b"verified wheel"
+    monkeypatch.setattr(
+        dependency_bootstrap,
+        "_fetch_pip_metadata",
+        lambda: _metadata_for_payload(wheel.name, payload),
+    )
+    monkeypatch.setattr(dependency_bootstrap, "_download", lambda _url: payload)
 
-    assert dependency_bootstrap._get_or_download_pip_wheel(str(vendor_path)) == newer_wheel
+    assert dependency_bootstrap._get_or_download_pip_wheel(str(vendor_path)) == wheel
+    assert wheel.read_bytes() == payload
+
+
+def test_get_or_download_pip_wheel_ignores_other_cached_wheels(tmp_path, monkeypatch):
+    vendor_path = tmp_path / "site-packages"
+    wheel_dir = tmp_path / dependency_bootstrap.PIP_WHEEL_DIRECTORY_NAME
+    wheel_dir.mkdir()
+    planted_wheel = wheel_dir / "pip-99.0-py3-none-any.whl"
+    planted_wheel.write_bytes(b"planted wheel")
+    payload = b"verified wheel"
+    metadata = _metadata_for_payload("pip-25.1.1-py3-none-any.whl", payload)
+    monkeypatch.setattr(dependency_bootstrap, "_fetch_pip_metadata", lambda: metadata)
+    monkeypatch.setattr(dependency_bootstrap, "_download", lambda _url: payload)
+
+    result = dependency_bootstrap._get_or_download_pip_wheel(str(vendor_path))
+
+    assert result == wheel_dir / "pip-25.1.1-py3-none-any.whl"
+    assert result.read_bytes() == payload
 
 
 def test_get_or_download_pip_wheel_downloads_and_verifies(tmp_path, monkeypatch):
-    import hashlib
-
     payload = b"verified wheel bytes"
-    metadata = _metadata("pip-26.0-py3-none-any.whl", hashlib.sha256(payload).hexdigest())
-    monkeypatch.setattr(dependency_bootstrap, "_fetch_pip_metadata", lambda: metadata)
+    monkeypatch.setattr(
+        dependency_bootstrap,
+        "_fetch_pip_metadata",
+        lambda: _metadata_for_payload("pip-26.0-py3-none-any.whl", payload),
+    )
     _stub_urlopen(monkeypatch, payload)
 
     result = dependency_bootstrap._get_or_download_pip_wheel(str(tmp_path / "site-packages"))
@@ -244,11 +324,34 @@ def test_get_or_download_pip_wheel_downloads_and_verifies(tmp_path, monkeypatch)
 
 
 def test_get_or_download_pip_wheel_rejects_bad_digest(tmp_path, monkeypatch):
-    metadata = _metadata("pip-26.0-py3-none-any.whl", "0" * 64)
-    monkeypatch.setattr(dependency_bootstrap, "_fetch_pip_metadata", lambda: metadata)
+    monkeypatch.setattr(
+        dependency_bootstrap,
+        "_fetch_pip_metadata",
+        lambda: _metadata("pip-26.0-py3-none-any.whl", "0" * 64),
+    )
     _stub_urlopen(monkeypatch, b"tampered")
 
     with pytest.raises(dependency_bootstrap.PipBootstrapError, match="sha256"):
+        dependency_bootstrap._get_or_download_pip_wheel(str(tmp_path / "site-packages"))
+
+
+def test_get_or_download_pip_wheel_rejects_missing_digest(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        dependency_bootstrap,
+        "_fetch_pip_metadata",
+        lambda: {
+            "urls": [
+                {
+                    "packagetype": "bdist_wheel",
+                    "filename": "pip-26.0-py3-none-any.whl",
+                    "url": "https://pypi.org/x/pip-26.0-py3-none-any.whl",
+                    "digests": {},
+                }
+            ],
+        },
+    )
+
+    with pytest.raises(dependency_bootstrap.PipBootstrapError, match="sha256 digest"):
         dependency_bootstrap._get_or_download_pip_wheel(str(tmp_path / "site-packages"))
 
 

@@ -175,27 +175,21 @@ class PipBootstrapError(Exception):
 class _PipWheel:
     url: str
     filename: str
-    sha256: str | None
+    sha256: str
 
 
 def _get_or_download_pip_wheel(vendor_path: str) -> Path:
     wheel_dir = Path(vendor_path).parent / PIP_WHEEL_DIRECTORY_NAME
     wheel_dir.mkdir(parents=True, exist_ok=True)
 
-    cached = sorted(
-        wheel_dir.glob("pip-*.whl"),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    if cached:
-        return cached[0]
-
     wheel = _latest_pip_wheel(_fetch_pip_metadata())
-    wheel_bytes = _download(wheel.url)
-    if wheel.sha256 and hashlib.sha256(wheel_bytes).hexdigest() != wheel.sha256:
-        raise PipBootstrapError("Downloaded pip wheel failed its PyPI sha256 check.")
-
     wheel_path = wheel_dir / wheel.filename
+    if wheel_path.exists() and _path_matches_sha256(wheel_path, wheel.sha256):
+        return wheel_path
+
+    wheel_bytes = _download(wheel.url)
+    _verify_pip_wheel_bytes(wheel_bytes, wheel.sha256, "Downloaded pip wheel")
+
     temporary_path = wheel_path.with_suffix(f"{wheel_path.suffix}.tmp")
     temporary_path.write_bytes(wheel_bytes)
     temporary_path.replace(wheel_path)
@@ -218,15 +212,44 @@ def _download(url: str) -> bytes:
         raise PipBootstrapError(f"Could not download pip from PyPI: {exc}") from exc
 
 
+def _path_matches_sha256(path: Path, expected_sha256: str) -> bool:
+    return hashlib.sha256(path.read_bytes()).hexdigest() == expected_sha256
+
+
+def _verify_pip_wheel_bytes(payload: bytes, expected_sha256: str, label: str) -> None:
+    if hashlib.sha256(payload).hexdigest() != expected_sha256:
+        raise PipBootstrapError(f"{label} failed its PyPI sha256 check.")
+
+
 def _latest_pip_wheel(metadata: dict) -> _PipWheel:
     for file in metadata.get("urls", []):
-        if file.get("packagetype") == "bdist_wheel":
-            url = file.get("url")
-            if isinstance(url, str) and url:
-                filename = file.get("filename") or Path(urlparse(url).path).name
-                return _PipWheel(url, filename, (file.get("digests") or {}).get("sha256"))
+        if file.get("packagetype") != "bdist_wheel":
+            continue
+
+        url = file.get("url")
+        if not isinstance(url, str) or not url:
+            continue
+
+        filename = file.get("filename") or Path(urlparse(url).path).name
+        if not isinstance(filename, str) or not filename:
+            continue
+        filename = Path(filename).name
+
+        sha256 = (file.get("digests") or {}).get("sha256")
+        if not _looks_like_sha256(sha256):
+            raise PipBootstrapError("PyPI did not return a sha256 digest for the pip wheel.")
+
+        return _PipWheel(url, filename, sha256)
 
     raise PipBootstrapError("PyPI did not return a pip wheel download URL.")
+
+
+def _looks_like_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 def _run_pip_wheel_in_process(pip_wheel: Path, argv: list[str]) -> int:
