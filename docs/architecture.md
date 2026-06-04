@@ -6,7 +6,7 @@ A Krita docker for picking colours in **OKLab / OKLCh** - a colour space where e
 
 For artists, this means a picker that *feels* right. Three slice views - a hue/chroma disk, a hue/lightness disk, and a lightness/chroma rectangle - sit next to an L/C/H panel with sliders, a hex box, and a swatch. Every move goes straight to Krita's foreground colour.
 
-Two things we care about above all:
+Two things to care about above all:
 
 - **Great feel for artists.** No lag while dragging. No surprise hue jump when chroma drops to zero. No flicker when switching views.
 - **Fast by design.** Heavy maths runs on NumPy. The picker caches what it can and never redraws a slice that hasn't changed.
@@ -23,7 +23,7 @@ The code is split into five layers, stacked bottom to top. Lower layers don't kn
 
 ```mermaid
 flowchart LR
-    A["<b>color_math · colour_state · gamut_fallback · models</b><br/><i>pure maths, value objects, fallback policy, slice contract</i>"]
+    A["<b>color_math · colour_state · colour_presentation · gamut_fallback · models</b><br/><i>pure maths, value objects, fallback presentation, slice contract</i>"]
     B["<b>renderers</b><br/><i>NumPy → RGBA buffers</i>"]
     C["<b>controller</b><br/><i>the one place that owns the colour</i>"]
     D["<b>dock + widgets</b><br/><i>Qt views: emit intent, draw pushed state</i>"]

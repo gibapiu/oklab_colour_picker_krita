@@ -9,12 +9,9 @@ import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker import renderers, selector_interaction
+from oklab_colour_picker.colour_presentation import PresentedColour
 from oklab_colour_picker.colour_state import ColourIntent
 from oklab_colour_picker.controller import normalize_oklab_for_krita
-from oklab_colour_picker.gamut_fallback import (
-    DEFAULT_FALLBACK_STRATEGY,
-    FallbackStrategy,
-)
 from oklab_colour_picker.models.base import positions_close
 from oklab_colour_picker.selector_interaction import Indicator, Pick, PickResult, Ring
 from oklab_colour_picker.selector_models import SelectorModel, SelectorSelection
@@ -23,16 +20,24 @@ from oklab_colour_picker.selector_models import SelectorModel, SelectorSelection
 @dataclass(frozen=True)
 class _SelectedColour:
     intent: ColourIntent
+    presentation: PresentedColour | None = None
 
     @classmethod
-    def from_value(cls, colour: ColourIntent | np.ndarray | Sequence[float]) -> "_SelectedColour":
+    def from_intent(cls, colour: ColourIntent | np.ndarray | Sequence[float]) -> "_SelectedColour":
         if isinstance(colour, ColourIntent):
             return cls(colour)
-        return cls(ColourIntent.from_oklab(np.asarray(colour, dtype=float)))
+        return cls(ColourIntent.from_value(colour))
 
     @classmethod
-    def from_selector_selection(cls, selection: SelectorSelection) -> "_SelectedColour":
-        return cls(ColourIntent.from_lch(*selection.lch))
+    def from_presented(cls, colour: PresentedColour) -> "_SelectedColour":
+        return cls(colour.intent, colour)
+
+    @classmethod
+    def from_selector_selection(
+        cls,
+        selection: SelectorSelection,
+    ) -> "_SelectedColour":
+        return cls.from_intent(ColourIntent.from_lch(*selection.lch))
 
     @property
     def paint_oklab(self) -> np.ndarray:
@@ -53,12 +58,9 @@ class SelectorWidget(QtWidgets.QWidget):
         self,
         model: SelectorModel,
         parent: QtWidgets.QWidget | None = None,
-        *,
-        fallback_strategy: FallbackStrategy = DEFAULT_FALLBACK_STRATEGY,
     ) -> None:
         super().__init__(parent)
         self._model = model
-        self._fallback_strategy = fallback_strategy
         self._selection: _SelectedColour | None = None
         self._interaction = selector_interaction.SelectorInteraction()
         self._image_cache_key: tuple[SelectorModel, int, int] | None = None
@@ -110,22 +112,35 @@ class SelectorWidget(QtWidgets.QWidget):
 
     def show_colour(
         self,
-        oklab: ColourIntent | Sequence[float] | None,
+        colour: PresentedColour | None,
         kind: object | None = None,
         *,
         model_factory: Callable[[], SelectorModel] | None = None,
     ) -> None:
-        result = self._interaction.dispatch(self, selector_interaction.Broadcast(oklab))
+        _require_presented_colour(colour)
+        result = self._interaction.dispatch(
+            self,
+            selector_interaction.Broadcast(colour),
+        )
+        if result.absorbed_echo and colour is not None:
+            self.set_colour(colour)
         if model_factory is not None and result.rendered_broadcast:
             self._apply_model(model_factory())
         elif model_factory is not None and result.absorbed_echo:
             model = model_factory()
             if self._model != model:
                 self.set_model(model)
-                self.set_colour(oklab)
+                self.set_colour(colour)
         self.update()
 
-    set_selected_colour = show_colour
+    def set_selected_colour(
+        self,
+        colour: PresentedColour | None,
+        kind: object | None = None,
+        *,
+        model_factory: Callable[[], SelectorModel] | None = None,
+    ) -> None:
+        self.show_colour(colour, kind, model_factory=model_factory)
 
     def indicator_position(self) -> tuple[float, float] | None:
         if self._selection is None:
@@ -138,11 +153,17 @@ class SelectorWidget(QtWidgets.QWidget):
     def colour(self) -> ColourIntent | None:
         return None if self._selection is None else self._selection.intent
 
-    def set_colour(self, colour: ColourIntent | np.ndarray | Sequence[float] | None) -> None:
+    def set_colour(
+        self,
+        colour: PresentedColour | ColourIntent | np.ndarray | Sequence[float] | None,
+    ) -> None:
         if colour is None:
             self._selection = None
             return
-        self._selection = _SelectedColour.from_value(colour)
+        if isinstance(colour, PresentedColour):
+            self._selection = _SelectedColour.from_presented(colour)
+            return
+        self._selection = _SelectedColour.from_intent(colour)
 
     def preview(self, colour: ColourIntent | np.ndarray | None) -> None:
         self.previewed.emit(_emit_payload(colour))
@@ -156,7 +177,10 @@ class SelectorWidget(QtWidgets.QWidget):
             return PickResult.exact(_SelectedColour.from_selector_selection(selection).intent)
         snapped = self._model.snapped_selector_selection_at_position(point, _widget_size(self))
         if snapped is not None:
-            return PickResult.snapped(_SelectedColour.from_selector_selection(snapped).intent, snapped.position)
+            return PickResult.snapped(
+                _SelectedColour.from_selector_selection(snapped).intent,
+                snapped.position,
+            )
         return PickResult.invalid()
 
     def intent_at(self, point: tuple[float, float]) -> ColourIntent | None:
@@ -183,7 +207,9 @@ class SelectorWidget(QtWidgets.QWidget):
         if spec is None:
             return Indicator.nothing()
         rings = [Ring(spec.desired, True)]
-        fallback = self._fallback_strategy.resolve(self._selection.intent)
+        fallback = None if self._selection.presentation is None else self._selection.presentation.fallback
+        if fallback is None:
+            return Indicator(tuple(rings))
         fallback_position = self._model.position_for_intent(
             fallback.fallback.selector_lch,
             _widget_size(self),
@@ -396,15 +422,26 @@ def _ring_pen(colour: QtCore.Qt.GlobalColor, width: float, *, solid: bool) -> Qt
     return pen
 
 
-def _paint(colour: ColourIntent | np.ndarray | Sequence[float]) -> np.ndarray:
+def _paint(colour: PresentedColour | ColourIntent | np.ndarray | Sequence[float]) -> np.ndarray:
+    if isinstance(colour, PresentedColour):
+        return colour.paint_oklab
     if isinstance(colour, ColourIntent):
         return colour.paint_oklab
     return np.asarray(colour, dtype=float)
 
 
-def _emit_payload(colour: ColourIntent | np.ndarray | Sequence[float] | None) -> object:
+def _require_presented_colour(colour: PresentedColour | None) -> None:
+    if colour is not None and not isinstance(colour, PresentedColour):
+        raise TypeError("displayed selector colours must be PresentedColour")
+
+
+def _emit_payload(
+    colour: PresentedColour | ColourIntent | np.ndarray | Sequence[float] | None,
+) -> object:
     if colour is None:
         return None
+    if isinstance(colour, PresentedColour):
+        return colour.intent
     if isinstance(colour, ColourIntent):
         return colour
     return np.asarray(colour, dtype=float).copy()

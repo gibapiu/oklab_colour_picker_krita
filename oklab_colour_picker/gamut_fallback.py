@@ -40,6 +40,3 @@ class ClippedSrgbFallbackStrategy:
             srgb8=srgb8,
             in_gamut=bool(color_math.in_srgb_gamut(srgb, epsilon=self.gamut_epsilon)),
         )
-
-
-DEFAULT_FALLBACK_STRATEGY = ClippedSrgbFallbackStrategy()

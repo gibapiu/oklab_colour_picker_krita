@@ -11,6 +11,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 import oklab_colour_picker
 from oklab_colour_picker import color_math
+from oklab_colour_picker.colour_presentation import default_colour_presenter
 from oklab_colour_picker.colour_state import ColourIntent
 from oklab_colour_picker.controller import ChangeKind
 from oklab_colour_picker.dock import ColourPickerDockPanel, SelectorMode
@@ -23,6 +24,10 @@ from oklab_colour_picker.plugin import (
 from oklab_colour_picker.widgets import HueLightnessSliceDiskWidget
 import oklab_colour_picker.dock as dock_module
 import oklab_colour_picker.plugin as plugin_module
+
+
+def _present(colour):
+    return default_colour_presenter().present(colour)
 
 
 def test_dock_panel_constructs_all_selector_views_and_switches_modes(qtbot):
@@ -608,7 +613,7 @@ def test_indicator_maps_to_same_colour_after_resize(qtbot):
     widget.resize(80, 40)
     colour = widget.model.color_at_position((30, 12), (80, 40))
     assert colour is not None
-    widget.set_selected_colour(colour)
+    widget.set_selected_colour(_present(colour))
 
     widget.resize(160, 90)
     actual = widget.indicator_position()
@@ -627,7 +632,7 @@ def test_selector_preview_then_commit_preserves_previous_swatch(qtbot):
     colour_a = color_math.oklch_to_oklab([0.50, 0.05, math.pi / 6.0])
     colour_b = color_math.oklch_to_oklab([0.60, 0.08, math.pi / 3.0])
     panel.set_selected_colour(colour_a, committed=True)
-    panel._readout_panel.set_previous_colour(colour_a)
+    panel._readout_panel.set_previous_colour(_present(colour_a))
 
     selector = panel.active_selector
     selector.previewed.emit(np.asarray(colour_b, dtype=float).copy())
@@ -645,7 +650,7 @@ def test_readout_commit_signal_preserves_previous_swatch(qtbot):
     colour_a = color_math.oklch_to_oklab([0.50, 0.05, math.pi / 6.0])
     colour_b = color_math.oklch_to_oklab([0.60, 0.08, math.pi / 3.0])
     panel.set_selected_colour(colour_a, committed=True)
-    panel._readout_panel.set_previous_colour(colour_a)
+    panel._readout_panel.set_previous_colour(_present(colour_a))
 
     panel._readout_panel.committed.emit(np.asarray(colour_b, dtype=float).copy())
 
@@ -1122,7 +1127,7 @@ def test_absorbed_echo_with_model_swap_preserves_intent_lch(qtbot):
         normalize_oklab_for_krita(pinned_paint),
     )
 
-    widget.show_colour(echo_intent, model_factory=lambda: new_model)
+    widget.show_colour(_present(echo_intent), model_factory=lambda: new_model)
 
     assert widget.model is new_model
     assert widget.colour is not None

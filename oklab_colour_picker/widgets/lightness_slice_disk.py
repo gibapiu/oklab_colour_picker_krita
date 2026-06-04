@@ -22,7 +22,6 @@ continuous along the boundary.
 from __future__ import annotations
 
 import math
-from typing import Sequence
 
 import numpy as np
 from PyQt5 import QtCore, QtGui
@@ -42,7 +41,11 @@ class LightnessSliceDiskWidget(SelectorWidget):
     _GAMUT_HUE_SAMPLES = 180
     _CONTOUR_LIGHTNESS_KEY_PRECISION = 4
 
-    def __init__(self, model: LightnessSliceModel, parent=None) -> None:
+    def __init__(
+        self,
+        model: LightnessSliceModel,
+        parent=None,
+    ) -> None:
         super().__init__(model, parent)
         self._gamut_path_cache_key: tuple[float, int, int] | None = None
         self._gamut_path_cache: QtGui.QPainterPath | None = None

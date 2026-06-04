@@ -13,6 +13,7 @@ KRITA_IMPORT_ALLOWED = {
     Path("oklab_colour_picker/krita_adapter.py"),
 }
 PURE_NO_QT_OR_KRITA = {
+    Path("oklab_colour_picker/colour_presentation.py"),
     Path("oklab_colour_picker/colour_state.py"),
     Path("oklab_colour_picker/color_math.py"),
     Path("oklab_colour_picker/gamut_fallback.py"),
@@ -31,6 +32,7 @@ SET_FOREGROUND_ALLOWED = {
     Path("oklab_colour_picker/krita_adapter.py"),
 }
 LOWER_LAYER_FILES = {
+    Path("oklab_colour_picker/colour_presentation.py"),
     Path("oklab_colour_picker/colour_state.py"),
     Path("oklab_colour_picker/color_math.py"),
     Path("oklab_colour_picker/gamut_fallback.py"),
@@ -46,6 +48,7 @@ LOWER_LAYER_FILES = {
     Path("oklab_colour_picker/controller.py"),
 }
 LOWER_LAYER_TESTS = {
+    "oklab_colour_picker.colour_presentation": Path("tests/test_colour_presentation.py"),
     "oklab_colour_picker.colour_state": Path("tests/test_colour_state.py"),
     "oklab_colour_picker.color_math": Path("tests/test_color_math.py"),
     "oklab_colour_picker.gamut_fallback": Path("tests/test_gamut_fallback.py"),
@@ -201,6 +204,32 @@ def test_selector_widget_uses_explicit_model_contract():
     ]
 
     assert probes == []
+
+
+def test_widgets_do_not_resolve_fallback_strategy_directly():
+    offenders = []
+    widgets_dir = ROOT / "oklab_colour_picker" / "widgets"
+    for full_path in sorted(widgets_dir.rglob("*.py")):
+        path = full_path.relative_to(ROOT)
+        tree = ast.parse(full_path.read_text(), filename=path.as_posix())
+        imports = set(_project_import_references(tree, path))
+        if "oklab_colour_picker.gamut_fallback" in imports:
+            offenders.append(f"{path}: imports gamut_fallback")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "oklab_colour_picker.colour_presentation":
+                imported = {alias.name for alias in node.names}
+                disallowed = imported - {"PresentedColour"}
+                if disallowed:
+                    offenders.append(f"{path}: imports {sorted(disallowed)} from colour_presentation")
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"present", "resolve"}
+            ):
+                offenders.append(f"{path}:{node.lineno}: calls {node.func.attr}")
+
+    assert offenders == []
 
 
 def test_selector_widget_keeps_no_absolute_pixel_indicator_memory():

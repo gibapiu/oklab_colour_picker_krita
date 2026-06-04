@@ -6,13 +6,24 @@ pytest.importorskip("PyQt5")
 
 from PyQt5 import QtCore, QtGui
 
+from oklab_colour_picker.colour_presentation import default_colour_presenter
 from oklab_colour_picker.selector_models import HueLightnessSliceModel
 from oklab_colour_picker.widgets import HueLightnessSliceDiskWidget
 from oklab_colour_picker.colour_state import ColourIntent
 
 
+def _widget(model):
+    return HueLightnessSliceDiskWidget(model)
+
+
+def _selector(model):
+    from oklab_colour_picker.widgets.selector import SelectorWidget
+
+    return SelectorWidget(model)
+
+
 def test_disk_widget_picks_through_lightness_overlay(qtbot):
-    widget = HueLightnessSliceDiskWidget(HueLightnessSliceModel(chroma=0.03))
+    widget = _widget(HueLightnessSliceModel(chroma=0.03))
     widget.resize(120, 120)
     qtbot.addWidget(widget)
     widget.show()
@@ -34,12 +45,12 @@ def test_disk_widget_renders_lightness_guide_rings_on_top_of_base(qtbot):
     from oklab_colour_picker.widgets.selector import SelectorWidget
 
     model = HueLightnessSliceModel(chroma=0.03)
-    overlay = HueLightnessSliceDiskWidget(model)
+    overlay = _widget(model)
     overlay.resize(81, 81)
     qtbot.addWidget(overlay)
     overlay.show()
 
-    bare = SelectorWidget(model)
+    bare = _selector(model)
     bare.resize(81, 81)
     qtbot.addWidget(bare)
     bare.show()
@@ -66,7 +77,7 @@ def test_disk_widget_indicator_follows_click_on_achromatic_slice(qtbot):
     # At chroma=0 every angle yields the same greyscale OKLab, so the model
     # can't recover hue from the colour. The widget must still place the
     # indicator at the click point instead of snapping to the hue=0 axis.
-    widget = HueLightnessSliceDiskWidget(HueLightnessSliceModel(chroma=0.0))
+    widget = _widget(HueLightnessSliceModel(chroma=0.0))
     widget.resize(121, 121)
     qtbot.addWidget(widget)
     widget.show()
@@ -84,7 +95,7 @@ def test_disk_widget_drops_achromatic_override_after_resize(qtbot):
     # The recorded click point is absolute widget pixels, so it must not
     # survive a resize: the indicator should fall back to model placement
     # rather than report the stale pre-resize pixel.
-    widget = HueLightnessSliceDiskWidget(HueLightnessSliceModel(chroma=0.0))
+    widget = _widget(HueLightnessSliceModel(chroma=0.0))
     widget.resize(121, 121)
     qtbot.addWidget(widget)
     widget.show()
@@ -122,4 +133,3 @@ def _paint_of(c):
     if c is None:
         return None
     return c.paint_oklab if isinstance(c, ColourIntent) else c
-

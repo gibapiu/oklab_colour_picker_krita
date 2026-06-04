@@ -5,6 +5,7 @@ import pytest
 from hypothesis import HealthCheck, assume, given, settings, strategies as st
 
 from oklab_colour_picker import color_math
+from oklab_colour_picker.colour_presentation import default_colour_presenter
 from oklab_colour_picker.controller import normalize_oklab_for_krita
 from oklab_colour_picker.selector_models import (
     HueLightnessSliceModel,
@@ -26,6 +27,16 @@ STATE_CASES = (
     StateKind.PINNED,
 )
 _QT_APP = None
+
+
+def _widget(model):
+    from oklab_colour_picker.widgets import SelectorWidget
+
+    return SelectorWidget(model)
+
+
+def _present(colour):
+    return default_colour_presenter().present(colour)
 
 
 @settings(
@@ -106,26 +117,25 @@ def test_p3_idle_indicator_is_independent_of_interaction_history(
     case, width, height, x_fraction, y_fraction, points
 ):
     _ensure_qapp()
-    from oklab_colour_picker.widgets import SelectorWidget
 
     _name, model = case
     size = (width, height)
     colour = model.color_at_position((x_fraction * (width - 1.0), y_fraction * (height - 1.0)), size)
     assume(colour is not None)
 
-    expected = SelectorWidget(model)
+    expected = _widget(model)
     expected.resize(*size)
-    expected.show_colour(colour)
+    expected.show_colour(_present(colour))
     expected_position = expected.indicator_position()
 
-    history = SelectorWidget(model)
+    history = _widget(model)
     history.resize(*size)
     _drive_gesture_history(history, points)
     history.resize(width + 1, height + 1)
     _process_qt_events()
     history.resize(*size)
     _process_qt_events()
-    history.show_colour(colour)
+    history.show_colour(_present(colour))
 
     assert history.state == "IDLE"
     assert history.indicator_position() == pytest.approx(expected_position)
@@ -145,20 +155,19 @@ def test_p2_show_colour_echo_idempotence_from_any_state(
     case, state_kind, width, height, x_fraction, y_fraction, colour
 ):
     _ensure_qapp()
-    from oklab_colour_picker.widgets import SelectorWidget
 
     _name, model = case
     size = (width, height)
     point = (x_fraction * (width - 1.0), y_fraction * (height - 1.0))
     assume(model.color_at_position(point, size) is not None)
-    widget = SelectorWidget(model)
+    widget = _widget(model)
     widget.resize(*size)
     assume(_enter_widget_state(widget, state_kind, point))
     normalized = normalize_oklab_for_krita(np.asarray(colour, dtype=float))
 
-    widget.show_colour(normalized)
+    widget.show_colour(_present(normalized))
     once = _selector_snapshot(widget)
-    widget.show_colour(normalized)
+    widget.show_colour(_present(normalized))
 
     assert _selector_snapshot(widget) == once
 
@@ -179,10 +188,9 @@ def test_p2_show_colour_echo_idempotence_from_any_state(
 )
 def test_p4_no_orphan_anchor_after_random_gesture_sequence(case, width, height, points):
     _ensure_qapp()
-    from oklab_colour_picker.widgets import SelectorWidget
 
     _name, model = case
-    widget = SelectorWidget(model)
+    widget = _widget(model)
     widget.resize(width + 40, height + 40)
     _drive_gesture_history(widget, points)
     actual_w, actual_h = widget.width(), widget.height()
@@ -263,7 +271,7 @@ def _enter_widget_state(widget, state_kind, point):
     if colour is None:
         return False
     if state_kind is StateKind.IDLE:
-        widget.show_colour(colour)
+        widget.show_colour(_present(colour))
         return widget.state == "IDLE"
     if state_kind is StateKind.DRAGGING:
         _send_mouse(
@@ -291,7 +299,7 @@ def _enter_widget_state(widget, state_kind, point):
         )
         return widget.state == "PINNED"
     if state_kind is StateKind.KEYBOARD:
-        widget.show_colour(colour)
+        widget.show_colour(_present(colour))
         for key in (
             QtCore.Qt.Key_Right,
             QtCore.Qt.Key_Left,

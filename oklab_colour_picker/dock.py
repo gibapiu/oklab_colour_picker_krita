@@ -11,6 +11,11 @@ import numpy as np
 from PyQt5 import QtCore, QtWidgets
 
 from oklab_colour_picker import color_math
+from oklab_colour_picker.colour_presentation import (
+    ColourPresenter,
+    PresentedColour,
+    default_colour_presenter,
+)
 from oklab_colour_picker.colour_state import ColourIntent
 from oklab_colour_picker.controller import ChangeKind
 from oklab_colour_picker.selector_models import (
@@ -35,7 +40,7 @@ class ColourView(Protocol):
 
     def show_colour(
         self,
-        colour: ColourIntent | Sequence[float],
+        colour: PresentedColour,
         kind: ChangeKind,
         *,
         model_factory: Callable[[], object] | None = None,
@@ -225,10 +230,17 @@ DEFAULT_COLOUR = np.array([0.5, 0.0, 0.0], dtype=float)
 class ColourPickerDockPanel(QtWidgets.QWidget):
     """Build and synchronize the selector widgets shown inside the docker."""
 
-    def __init__(self, controller: DockController, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(
+        self,
+        controller: DockController,
+        parent: QtWidgets.QWidget | None = None,
+        *,
+        presenter: ColourPresenter | None = None,
+    ) -> None:
         super().__init__(parent)
         self._controller = controller
         self._view_seed_intent = _selected_or_default(controller.selected_colour)
+        self._presenter = presenter or default_colour_presenter()
         self._selector_modes = tuple(MODE_SPECS)
         self._tabs = QtWidgets.QTabWidget(self)
         # SelectorWidget structurally satisfies ColourView; the readout does
@@ -289,18 +301,15 @@ class ColourPickerDockPanel(QtWidgets.QWidget):
     def _on_colour_changed(self, oklab: ColourIntent | Sequence[float], kind: ChangeKind) -> None:
         self._show_on_views(self._intent_from_value(oklab), kind)
 
-    def _show_on_views(
-        self,
-        intent: ColourIntent,
-        kind: ChangeKind,
-    ) -> None:
+    def _show_on_views(self, intent: ColourIntent, kind: ChangeKind) -> None:
         self._view_seed_intent = intent
-        self._readout_panel.show_colour(intent, kind)
+        colour = self._presenter.present(intent, achromatic_hue=self._view_seed_intent.hue)
+        self._readout_panel.show_colour(colour, kind)
         for mode, widget in self._selectors.items():
             widget.show_colour(
-                intent,
+                colour,
                 kind,
-                model_factory=self._selector_model_factory(mode, intent),
+                model_factory=self._selector_model_factory(mode, colour),
             )
 
     def _build_selector_tabs(self) -> None:
@@ -322,7 +331,11 @@ class ColourPickerDockPanel(QtWidgets.QWidget):
             return existing
 
         seed = self._view_seed_intent
-        widget = _build_selector_widget(mode, self._cached_model_for_colour(mode, seed), self)
+        widget = _build_selector_widget(
+            mode,
+            self._cached_model_for_colour(mode, seed),
+            self,
+        )
         widget.setObjectName(_mode_spec(mode).object_name)
         self._seed_selector(widget, seed)
         widget.previewed.connect(self._preview_colour)
@@ -351,8 +364,12 @@ class ColourPickerDockPanel(QtWidgets.QWidget):
         layout.addWidget(self._tabs)
         layout.addWidget(self._readout_panel)
 
-    def _selector_model_factory(self, mode: SelectorMode, intent: ColourIntent) -> Callable[[], object]:
-        return lambda: self._cached_model_for_colour(mode, intent)
+    def _selector_model_factory(
+        self,
+        mode: SelectorMode,
+        colour: PresentedColour,
+    ) -> Callable[[], object]:
+        return lambda: self._cached_model_for_colour(mode, colour.intent)
 
     def _cached_model_for_colour(self, mode: SelectorMode, colour: ColourIntent | Sequence[float]) -> object:
         intent = self._intent_from_value(colour)
@@ -366,11 +383,12 @@ class ColourPickerDockPanel(QtWidgets.QWidget):
         return model
 
     def _seed_selector(self, widget: SelectorWidget, intent: ColourIntent) -> None:
-        widget.show_colour(intent, ChangeKind.INITIAL)
+        widget.show_colour(self._presenter.present(intent), ChangeKind.INITIAL)
 
     def _seed_readout_panel(self, intent: ColourIntent) -> None:
-        self._readout_panel.show_colour(intent, ChangeKind.INITIAL)
-        self._readout_panel.set_previous_colour(intent)
+        colour = self._presenter.present(intent)
+        self._readout_panel.show_colour(colour, ChangeKind.INITIAL)
+        self._readout_panel.set_previous_colour(colour)
 
     def _preview_colour(self, oklab: ColourIntent | Sequence[float] | None) -> None:
         self._controller.set_preview_colour(oklab)
