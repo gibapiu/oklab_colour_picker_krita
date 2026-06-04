@@ -820,6 +820,27 @@ def test_dock_shows_friendly_message_when_numpy_is_missing(qtbot, monkeypatch):
     assert widget.findChild(QtWidgets.QPushButton, "oklab-install-numpy").text() == "Install NumPy"
 
 
+def test_dock_shows_installer_when_numpy_binary_is_incompatible(qtbot, monkeypatch):
+    import types
+
+    fake_dock = types.ModuleType("oklab_colour_picker.dock")
+
+    def _raise_numpy_incompatible(_name):
+        raise ImportError("Importing the numpy C-extensions failed: cpython-314 is incompatible")
+
+    fake_dock.__getattr__ = _raise_numpy_incompatible
+    monkeypatch.setitem(sys.modules, "oklab_colour_picker.dock", fake_dock)
+
+    dock_class = create_dock_widget_class(FakeDockWidget)
+    dock = dock_class()
+    qtbot.addWidget(dock)
+
+    widget = dock.widget()
+    assert widget.objectName() == "oklab-missing-dependency"
+    assert "numpy" in widget.findChild(QtWidgets.QLabel).text().lower()
+    assert widget.findChild(QtWidgets.QPushButton, "oklab-install-numpy").text() == "Install NumPy"
+
+
 def test_install_numpy_action_requires_confirmation(qtbot, monkeypatch, tmp_path):
     import types
 
