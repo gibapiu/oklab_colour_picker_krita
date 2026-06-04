@@ -56,7 +56,7 @@ def create_dock_widget_class(
 
             try:
                 from oklab_colour_picker.dock import ColourPickerDockPanel
-            except ModuleNotFoundError as exc:
+            except ImportError as exc:
                 if not _is_known_runtime_dependency(exc):
                     raise
                 self.setWidget(
@@ -111,10 +111,14 @@ def _app_data_location(app) -> str | None:
     return None if location is None else str(location)
 
 
-def _is_known_runtime_dependency(error: ModuleNotFoundError) -> bool:
-    name = error.name or ""
+def _is_known_runtime_dependency(error: ImportError) -> bool:
+    name = getattr(error, "name", None) or ""
     root = name.split(".", 1)[0]
-    return root in _KNOWN_RUNTIME_DEPENDENCIES
+    if root in _KNOWN_RUNTIME_DEPENDENCIES:
+        return True
+
+    message = str(error).lower()
+    return any(dependency in message for dependency in _KNOWN_RUNTIME_DEPENDENCIES)
 
 
 def _build_missing_dependency_widget(
