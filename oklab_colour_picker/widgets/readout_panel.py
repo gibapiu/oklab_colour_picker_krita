@@ -19,6 +19,10 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from oklab_colour_picker import color_math, renderers
 from oklab_colour_picker.colour_state import ColourIntent
 from oklab_colour_picker.controller import ChangeKind
+from oklab_colour_picker.gamut_fallback import (
+    DEFAULT_FALLBACK_STRATEGY,
+    FallbackStrategy,
+)
 
 
 # Per-axis numeric step sizes (Shift x10). H is in degrees, displayed in
@@ -63,15 +67,11 @@ class _LatchedColour:
 
 
 def oklab_to_qcolor(oklab: Sequence[float]) -> QtGui.QColor:
-    """Return a clipped sRGB ``QColor`` for the OKLab colour."""
-
-    srgb = color_math.clip_srgb(color_math.oklab_to_srgb(np.asarray(oklab, dtype=float)))
-    return QtGui.QColor.fromRgbF(float(srgb[0]), float(srgb[1]), float(srgb[2]))
+    result = DEFAULT_FALLBACK_STRATEGY.resolve(ColourIntent.from_value(oklab))
+    return _qcolor_from_srgb8(result.srgb8)
 
 
 def oklab_to_hex(oklab: Sequence[float]) -> str:
-    """Return ``#rrggbb`` for the OKLab colour, clipping to sRGB if needed."""
-
     return oklab_to_qcolor(oklab).name(QtGui.QColor.HexRgb)
 
 
@@ -103,6 +103,10 @@ def _perceived_luminance(r: int, g: int, b: int) -> float:
 
 def _ink_for(r: int, g: int, b: int) -> QtGui.QColor:
     return _DARK_INK if _perceived_luminance(r, g, b) > 0.55 else _LIGHT_INK
+
+
+def _qcolor_from_srgb8(srgb8: tuple[int, int, int]) -> QtGui.QColor:
+    return QtGui.QColor(int(srgb8[0]), int(srgb8[1]), int(srgb8[2]))
 
 
 class _GradientSlider(QtWidgets.QSlider):
@@ -484,16 +488,26 @@ class _UnifiedSwatch(QtWidgets.QWidget):
             self._colour = QtGui.QColor(0, 0, 0, 0)
             self._hex_text = "#000000"
         else:
-            self._colour = oklab_to_qcolor(oklab)
-            self._hex_text = self._colour.name(QtGui.QColor.HexRgb)
+            self.set_srgb8(DEFAULT_FALLBACK_STRATEGY.resolve(ColourIntent.from_value(oklab)).srgb8)
+            return
+        self._sync_hex_editor()
+        self._apply_ink_styles()
+        self.update()
+
+    def set_srgb8(self, srgb8: tuple[int, int, int]) -> None:
+        self._colour = _qcolor_from_srgb8(srgb8)
+        self._hex_text = self._colour.name(QtGui.QColor.HexRgb)
+        self._sync_hex_editor()
+        self._apply_ink_styles()
+        self.update()
+
+    def _sync_hex_editor(self) -> None:
         if not self._editing and self._hex_edit.text().lower() != self._hex_text:
             self._suppress_finish = True
             try:
                 self._hex_edit.setText(self._hex_text)
             finally:
                 self._suppress_finish = False
-        self._apply_ink_styles()
-        self.update()
 
     def set_oog_visible(self, visible: bool) -> None:
         self._oog_visible = bool(visible)
@@ -636,8 +650,14 @@ class ReadoutPanel(QtWidgets.QWidget):
     previewed = QtCore.pyqtSignal(object)
     committed = QtCore.pyqtSignal(object)
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+        *,
+        fallback_strategy: FallbackStrategy = DEFAULT_FALLBACK_STRATEGY,
+    ) -> None:
         super().__init__(parent)
+        self._fallback_strategy = fallback_strategy
         self._current_intent: ColourIntent | None = None
         self._previous_intent: ColourIntent | None = None
         self._current_oklab: np.ndarray | None = None
@@ -737,7 +757,7 @@ class ReadoutPanel(QtWidgets.QWidget):
             return
         self._previous_intent = ColourIntent.from_value(oklab, achromatic_hue=self.hue_intent)
         self._previous_oklab = self._previous_intent.paint_oklab
-        self._swatch.set_revert_target(oklab_to_hex(self._previous_oklab))
+        self._swatch.set_revert_target(self._hex_for_intent(self._previous_intent))
 
     # -- Internal sync -------------------------------------------------
 
@@ -751,28 +771,33 @@ class ReadoutPanel(QtWidgets.QWidget):
         ):
             self._previous_intent = self._current_intent
             self._previous_oklab = self._current_oklab.copy()
-            self._swatch.set_revert_target(oklab_to_hex(self._previous_oklab))
+            self._swatch.set_revert_target(self._hex_for_intent(self._previous_intent))
         self._current_intent = intent
         self._current_oklab = colour
         self._sync_widgets_to_colour(intent)
+
+    def _hex_for_intent(self, intent: ColourIntent) -> str:
+        colour = _qcolor_from_srgb8(self._fallback_strategy.resolve(intent).srgb8)
+        return colour.name(QtGui.QColor.HexRgb)
 
     def _sync_widgets_to_colour(self, intent: ColourIntent) -> None:
         l, c, h = intent.selector_lch
         self._row_l.set_value(float(l))
         self._row_c.set_value(float(c))
         self._row_h.set_value(math.degrees(h))
-        self._sync_readout_presentation(intent.paint_oklab, float(l), float(c), float(h))
+        self._sync_readout_presentation(intent, float(l), float(c), float(h))
 
     def _sync_readout_presentation(
-        self, oklab: np.ndarray, lightness: float, chroma: float, hue: float
+        self, intent: ColourIntent, lightness: float, chroma: float, hue: float
     ) -> None:
-        self._swatch.set_colour(oklab)
-        self._swatch.set_oog_visible(not is_in_srgb_gamut(oklab))
+        fallback = self._fallback_strategy.resolve(intent)
+        self._swatch.set_srgb8(fallback.srgb8)
+        self._swatch.set_oog_visible(not fallback.in_gamut)
         self._refresh_tracks(lightness, chroma, hue)
-        self._refresh_handle_fallback(oklab)
+        self._refresh_handle_fallback(fallback.srgb8)
 
-    def _refresh_handle_fallback(self, oklab: np.ndarray) -> None:
-        colour = oklab_to_qcolor(oklab)
+    def _refresh_handle_fallback(self, srgb8: tuple[int, int, int]) -> None:
+        colour = _qcolor_from_srgb8(srgb8)
         for row in (self._row_l, self._row_c, self._row_h):
             row.slider.set_fallback_colour(colour)
 
@@ -836,7 +861,7 @@ class ReadoutPanel(QtWidgets.QWidget):
             return
         self._begin_edit()
         l, c, h = intent.selector_lch
-        self._sync_readout_presentation(intent.paint_oklab, l, c, h)
+        self._sync_readout_presentation(intent, l, c, h)
         self.previewed.emit(intent)
 
     def _on_l_changed(self, value: float, committed: bool) -> None:

@@ -1050,7 +1050,7 @@ def test_indicator_survives_slider_commit_on_active_selector(qtbot):
     assert rings
 
 
-def test_off_leaf_press_keeps_indicator_visible_via_snap(qtbot):
+def test_off_leaf_press_keeps_indicator_visible_with_drag_snap(qtbot):
     controller = FakeController()
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
@@ -1060,7 +1060,7 @@ def test_off_leaf_press_keeps_indicator_visible_via_snap(qtbot):
 
     oog = ColourIntent.from_lch(0.5, color_math.SRGB_MAX_CHROMA, 0.0)
     controller._broadcast(oog, ChangeKind.PREVIEW)
-    assert len(active._interaction.indicator(active).rings) == 2
+    assert len(active._interaction.indicator(active).rings) == 1
 
     off_leaf = QtCore.QPoint(118, 60)
     _send_mouse(active, QtCore.QEvent.MouseButtonPress, off_leaf, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)

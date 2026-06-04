@@ -26,6 +26,7 @@ KRITA_ALLOWED = {
 PURE_NO_QT = {
     Path("oklab_colour_picker/colour_state.py"),
     Path("oklab_colour_picker/color_math.py"),
+    Path("oklab_colour_picker/gamut_fallback.py"),
     Path("oklab_colour_picker/renderers.py"),
     Path("oklab_colour_picker/selector_interaction.py"),
     Path("oklab_colour_picker/selector_models.py"),
@@ -43,6 +44,7 @@ SET_FOREGROUND_ALLOWED = {
 LOWER_LAYER_FILES = {
     Path("oklab_colour_picker/colour_state.py"),
     Path("oklab_colour_picker/color_math.py"),
+    Path("oklab_colour_picker/gamut_fallback.py"),
     Path("oklab_colour_picker/renderers.py"),
     Path("oklab_colour_picker/selector_interaction.py"),
     Path("oklab_colour_picker/selector_models.py"),

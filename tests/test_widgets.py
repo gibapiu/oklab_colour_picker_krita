@@ -10,6 +10,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker import color_math
 from oklab_colour_picker.colour_state import ColourIntent
+from oklab_colour_picker.gamut_fallback import ClippedSrgbFallbackStrategy
 from oklab_colour_picker.selector_models import (
     HueLightnessSliceModel,
     LightnessChromaSliceModel,
@@ -443,6 +444,42 @@ def test_indicator_position_stays_strict_for_out_of_gamut_leaf_colour(qtbot):
     widget.set_selected_colour(colour)
 
     assert widget.indicator_position() is None
+
+
+def test_out_of_gamut_indicator_uses_clipped_srgb_fallback(qtbot):
+    hue = math.radians(110.0)
+    lightness = 0.05
+    chroma = float(color_math.max_chroma_for_lh(lightness, hue)) * 1.2
+    model = LightnessChromaSliceModel(hue=hue)
+    widget = SelectorWidget(model)
+    widget.resize(101, 101)
+    qtbot.addWidget(widget)
+    intent = ColourIntent.from_lch(lightness, chroma, hue)
+    model_snap = model.indicator_for_intent(intent.selector_lch, _size(widget))
+    assert model_snap is not None
+    assert model_snap.snapped is not None
+
+    widget.set_selected_colour(intent)
+    indicator = widget.model_indicator()
+
+    fallback = ClippedSrgbFallbackStrategy().resolve(intent)
+    expected = model.position_for_intent(fallback.fallback.selector_lch, _size(widget))
+    assert expected is not None
+    assert len(indicator.rings) == 2
+    assert indicator.rings[1].solid is False
+    assert indicator.rings[1].position == pytest.approx(expected)
+    assert indicator.rings[1].position != pytest.approx(model_snap.snapped)
+
+
+def test_out_of_gamut_indicator_omits_fallback_off_selector_slice(qtbot):
+    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(101, 101)
+    qtbot.addWidget(widget)
+    intent = ColourIntent.from_lch(0.6, color_math.SRGB_MAX_CHROMA, math.pi / 2.0)
+
+    widget.set_selected_colour(intent)
+
+    assert widget.model_indicator().rings == ()
 
 
 def test_paint_event_renders_selector_image(qtbot):

@@ -11,6 +11,11 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from oklab_colour_picker import renderers, selector_interaction
 from oklab_colour_picker.colour_state import ColourIntent
 from oklab_colour_picker.controller import normalize_oklab_for_krita
+from oklab_colour_picker.gamut_fallback import (
+    DEFAULT_FALLBACK_STRATEGY,
+    FallbackStrategy,
+)
+from oklab_colour_picker.models.base import positions_close
 from oklab_colour_picker.selector_interaction import Indicator, Pick, PickResult, Ring
 from oklab_colour_picker.selector_models import SelectorModel, SelectorSelection
 
@@ -44,9 +49,16 @@ class SelectorWidget(QtWidgets.QWidget):
     previewed = QtCore.pyqtSignal(object)
     committed = QtCore.pyqtSignal(object)
 
-    def __init__(self, model: SelectorModel, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(
+        self,
+        model: SelectorModel,
+        parent: QtWidgets.QWidget | None = None,
+        *,
+        fallback_strategy: FallbackStrategy = DEFAULT_FALLBACK_STRATEGY,
+    ) -> None:
         super().__init__(parent)
         self._model = model
+        self._fallback_strategy = fallback_strategy
         self._selection: _SelectedColour | None = None
         self._interaction = selector_interaction.SelectorInteraction()
         self._image_cache_key: tuple[SelectorModel, int, int] | None = None
@@ -171,8 +183,17 @@ class SelectorWidget(QtWidgets.QWidget):
         if spec is None:
             return Indicator.nothing()
         rings = [Ring(spec.desired, True)]
-        if spec.snapped is not None and spec.out_of_gamut:
-            rings.append(Ring(spec.snapped, False))
+        fallback = self._fallback_strategy.resolve(self._selection.intent)
+        fallback_position = self._model.position_for_intent(
+            fallback.fallback.selector_lch,
+            _widget_size(self),
+        )
+        if (
+            not fallback.in_gamut
+            and fallback_position is not None
+            and not positions_close(spec.desired, fallback_position)
+        ):
+            rings.append(Ring(fallback_position, False))
         return Indicator(tuple(rings))
 
     def model_position(self) -> tuple[float, float] | None:

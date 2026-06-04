@@ -23,7 +23,7 @@ The code is split into five layers, stacked bottom to top. Lower layers don't kn
 
 ```mermaid
 flowchart LR
-    A["<b>color_math · colour_state · models</b><br/><i>pure maths, value objects, slice contract</i>"]
+    A["<b>color_math · colour_state · gamut_fallback · models</b><br/><i>pure maths, value objects, fallback policy, slice contract</i>"]
     B["<b>renderers</b><br/><i>NumPy → RGBA buffers</i>"]
     C["<b>controller</b><br/><i>the one place that owns the colour</i>"]
     D["<b>dock + widgets</b><br/><i>Qt views: emit intent, draw pushed state</i>"]
@@ -123,6 +123,7 @@ Choices made so the picker *feels* right under an artist's hand:
 
 - **Hold the hue at `chroma=0`.** Hue is undefined at zero chroma in maths, but artists expect "raise chroma and get my hue back". The intent object carries the hue even when the paint is neutral grey.
 - **Out-of-gamut still drags smoothly.** When the cursor leaves the in-gamut area, the model snaps to the nearest valid point. A dual-ring indicator (solid where you wanted, dashed where it landed) shows what happened - the gesture never breaks.
+- **Selected-colour fallback matches Krita.** Once a colour is selected, fallback display is resolved by `gamut_fallback` through clipped 8-bit sRGB - the same colour the swatch shows and Krita writes. Selector drag snapping is only for gesture continuity; it is not reused as the selected-colour fallback.
 
 ```mermaid
 flowchart LR

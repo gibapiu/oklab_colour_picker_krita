@@ -13,6 +13,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from oklab_colour_picker.controller import ChangeKind, normalize_oklab_for_krita
 from oklab_colour_picker import color_math, renderers
 from oklab_colour_picker.colour_state import ColourIntent
+from oklab_colour_picker.gamut_fallback import ClippedSrgbFallbackStrategy
 from oklab_colour_picker.widgets.readout_panel import (
     ReadoutPanel,
     _UnifiedSwatch,
@@ -652,6 +653,25 @@ def test_readout_panel_out_of_gamut_warning_visibility(qtbot):
         ChangeKind.COMMIT,
     )
     assert panel._swatch._oog_visible
+
+
+def test_readout_panel_uses_shared_fallback_rgb_for_swatch_and_handles(qtbot):
+    panel = ReadoutPanel()
+    qtbot.addWidget(panel)
+    intent = ColourIntent.from_lch(0.6, color_math.SRGB_MAX_CHROMA, 0.0)
+
+    panel.show_colour(intent, ChangeKind.COMMIT)
+
+    expected = ClippedSrgbFallbackStrategy().resolve(intent).srgb8
+    assert (
+        panel._swatch._colour.red(),
+        panel._swatch._colour.green(),
+        panel._swatch._colour.blue(),
+    ) == expected
+    for row in (panel._row_l, panel._row_c, panel._row_h):
+        fallback = row.slider._fallback_colour
+        assert fallback is not None
+        assert (fallback.red(), fallback.green(), fallback.blue()) == expected
 
 
 def _send_mouse(widget, event_type, position):
