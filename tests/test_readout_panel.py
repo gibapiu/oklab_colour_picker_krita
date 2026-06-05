@@ -12,14 +12,13 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker.controller import ChangeKind, normalize_oklab_for_krita
 from oklab_colour_picker import color_math, renderers
-from oklab_colour_picker.colour_presentation import default_colour_presenter
 from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.gamut_fallback import ClippedSrgbFallbackStrategy
 from oklab_colour_picker.widgets.readout_panel import (
     ReadoutPanel,
     _UnifiedSwatch,
     hex_to_oklab,
 )
+from tests.helpers import presented_colour
 
 
 # -- pure helpers -----------------------------------------------------------
@@ -33,8 +32,14 @@ def _panel() -> ReadoutPanel:
     return ReadoutPanel()
 
 
-def _present(colour):
-    return default_colour_presenter().present(colour)
+def _present(colour, *, srgb8=None, in_gamut=True, fallback=None):
+    intent = ColourIntent.from_value(colour)
+    return presented_colour(
+        intent,
+        srgb8=_srgb8(intent.paint_oklab) if srgb8 is None else srgb8,
+        in_gamut=in_gamut,
+        fallback=fallback,
+    )
 
 
 def _show(panel: ReadoutPanel, colour, kind: ChangeKind) -> None:
@@ -42,8 +47,12 @@ def _show(panel: ReadoutPanel, colour, kind: ChangeKind) -> None:
 
 
 def oklab_to_hex(oklab) -> str:
-    srgb8 = default_colour_presenter().present(ColourIntent.from_value(oklab)).srgb8
-    return QtGui.QColor(*srgb8).name(QtGui.QColor.HexRgb)
+    return QtGui.QColor(*_srgb8(oklab)).name(QtGui.QColor.HexRgb)
+
+
+def _srgb8(oklab) -> tuple[int, int, int]:
+    srgb8 = color_math.quantize_srgb8(color_math.oklab_to_srgb(oklab))
+    return tuple(int(v) for v in srgb8)
 
 
 @pytest.mark.parametrize(
@@ -67,12 +76,15 @@ def test_hex_rejects_malformed(bad):
 
 
 def test_in_gamut_detects_displayable_colour():
-    assert _present(color_math.srgb_to_oklab(np.array([0.5, 0.5, 0.5]))).in_gamut
+    assert presented_colour(
+        color_math.srgb_to_oklab(np.array([0.5, 0.5, 0.5])),
+        in_gamut=True,
+    ).in_gamut
 
 
 def test_in_gamut_flags_super_saturated_oklch():
     super_saturated = color_math.oklch_to_oklab([0.6, color_math.SRGB_MAX_CHROMA, 0.0])
-    assert not _present(super_saturated).in_gamut
+    assert not presented_colour(super_saturated, in_gamut=False).in_gamut
 
 
 # -- gamut-gap rendering ----------------------------------------------------
@@ -690,12 +702,20 @@ def test_readout_panel_out_of_gamut_warning_visibility(qtbot):
     panel = _panel()
     qtbot.addWidget(panel)
 
-    _show(panel, color_math.srgb_to_oklab(np.array([0.5, 0.5, 0.5])), ChangeKind.COMMIT)
+    panel.show_colour(
+        presented_colour(
+            color_math.srgb_to_oklab(np.array([0.5, 0.5, 0.5])),
+            in_gamut=True,
+        ),
+        ChangeKind.COMMIT,
+    )
     assert not panel._swatch._oog_visible
 
-    _show(
-        panel,
-        color_math.oklch_to_oklab([0.6, color_math.SRGB_MAX_CHROMA, 0.0]),
+    panel.show_colour(
+        presented_colour(
+            color_math.oklch_to_oklab([0.6, color_math.SRGB_MAX_CHROMA, 0.0]),
+            in_gamut=False,
+        ),
         ChangeKind.COMMIT,
     )
     assert panel._swatch._oog_visible
@@ -705,19 +725,22 @@ def test_readout_panel_uses_shared_fallback_rgb_for_swatch_and_handles(qtbot):
     panel = _panel()
     qtbot.addWidget(panel)
     intent = ColourIntent.from_lch(0.6, color_math.SRGB_MAX_CHROMA, 0.0)
+    fallback_rgb = (23, 45, 67)
 
-    _show(panel, intent, ChangeKind.COMMIT)
+    panel.show_colour(
+        presented_colour(intent, srgb8=fallback_rgb, in_gamut=False),
+        ChangeKind.COMMIT,
+    )
 
-    expected = ClippedSrgbFallbackStrategy().resolve(intent).srgb8
     assert (
         panel._swatch._colour.red(),
         panel._swatch._colour.green(),
         panel._swatch._colour.blue(),
-    ) == expected
+    ) == fallback_rgb
     for row in (panel._row_l, panel._row_c, panel._row_h):
         fallback = row.slider._fallback_colour
         assert fallback is not None
-        assert (fallback.red(), fallback.green(), fallback.blue()) == expected
+        assert (fallback.red(), fallback.green(), fallback.blue()) == fallback_rgb
 
 
 def _send_mouse(widget, event_type, position):

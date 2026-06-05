@@ -13,11 +13,11 @@ pytest.importorskip("PyQt5")
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker import color_math
-from oklab_colour_picker.colour_presentation import default_colour_presenter
 from oklab_colour_picker.controller import normalize_oklab_for_krita
 from oklab_colour_picker.selector_models import LightnessChromaSliceModel, LightnessSliceModel
 from oklab_colour_picker.widgets import SelectorWidget
 from oklab_colour_picker.colour_state import ColourIntent
+from tests.helpers import presented_colour
 
 
 SIZE = (64, 32)
@@ -32,7 +32,7 @@ def _shown(qtbot, model=None, size=SIZE):
 
 
 def _present(colour):
-    return default_colour_presenter().present(colour)
+    return presented_colour(colour)
 
 
 def _mouse(widget, kind, point, button, buttons):

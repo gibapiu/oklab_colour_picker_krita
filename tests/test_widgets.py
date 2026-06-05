@@ -9,9 +9,7 @@ pytest.importorskip("PyQt5")
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker import color_math
-from oklab_colour_picker.colour_presentation import default_colour_presenter
 from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.gamut_fallback import ClippedSrgbFallbackStrategy
 from oklab_colour_picker.selector_models import (
     HueLightnessSliceModel,
     LightnessChromaSliceModel,
@@ -20,6 +18,7 @@ from oklab_colour_picker.selector_models import (
     SelectorSelection,
 )
 from oklab_colour_picker.widgets import SelectorWidget
+from tests.helpers import presented_colour
 
 
 def _paint_of(c):
@@ -33,7 +32,7 @@ def _widget(model):
 
 
 def _present(colour):
-    return default_colour_presenter().present(colour)
+    return presented_colour(colour)
 
 
 def test_mouse_drag_emits_previews_and_commit(qtbot):
@@ -455,7 +454,7 @@ def test_indicator_position_stays_strict_for_out_of_gamut_leaf_colour(qtbot):
     assert widget.indicator_position() is None
 
 
-def test_out_of_gamut_indicator_uses_clipped_srgb_fallback(qtbot):
+def test_out_of_gamut_indicator_uses_presented_fallback_selector_position(qtbot):
     hue = math.radians(110.0)
     lightness = 0.05
     chroma = float(color_math.max_chroma_for_lh(lightness, hue)) * 1.2
@@ -464,13 +463,19 @@ def test_out_of_gamut_indicator_uses_clipped_srgb_fallback(qtbot):
     widget.resize(101, 101)
     qtbot.addWidget(widget)
     intent = ColourIntent.from_lch(lightness, chroma, hue)
+    fallback = ColourIntent.from_lch(
+        lightness,
+        float(color_math.max_chroma_for_lh(lightness, hue)) * 0.5,
+        hue,
+    )
 
-    widget.set_selected_colour(_present(intent))
+    widget.set_selected_colour(
+        presented_colour(intent, in_gamut=False, fallback=fallback)
+    )
     indicator = widget.model_indicator()
 
-    fallback = ClippedSrgbFallbackStrategy().resolve(intent)
     desired = model.geometric_position_for_intent(intent.selector_lch, _size(widget))
-    landed = model.position_for_intent(fallback.resolved.selector_lch, _size(widget))
+    landed = model.position_for_intent(fallback.selector_lch, _size(widget))
     assert desired is not None
     assert landed is not None
     assert len(indicator.rings) == 2
@@ -486,10 +491,36 @@ def test_out_of_gamut_indicator_omits_fallback_off_selector_slice(qtbot):
     widget.resize(101, 101)
     qtbot.addWidget(widget)
     intent = ColourIntent.from_lch(0.6, color_math.SRGB_MAX_CHROMA, math.pi / 2.0)
+    off_slice_fallback = ColourIntent.from_lch(0.6, 0.05, math.pi / 2.0)
 
-    widget.set_selected_colour(_present(intent))
+    widget.set_selected_colour(
+        presented_colour(intent, in_gamut=False, fallback=off_slice_fallback)
+    )
 
     assert widget.model_indicator().rings == ()
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: _widget(LightnessSliceModel(lightness=0.5)),
+        lambda: _widget(HueLightnessSliceModel(chroma=0.03)),
+        lambda: _widget(LightnessChromaSliceModel(hue=0.0)),
+    ],
+)
+def test_tiny_widget_size_does_not_raise(factory, qtbot):
+    widget = factory()
+    widget.setMinimumSize(0, 0)
+    widget.resize(1, 1)
+    qtbot.addWidget(widget)
+
+    widget.set_selected_colour(_present(np.array([0.5, 0.0, 0.0])))
+
+    assert widget.indicator_position() is None
+    image = QtGui.QImage(QtCore.QSize(1, 1), QtGui.QImage.Format_RGBA8888)
+    painter = QtGui.QPainter(image)
+    widget.render(painter)
+    painter.end()
 
 
 def test_paint_event_renders_selector_image(qtbot):

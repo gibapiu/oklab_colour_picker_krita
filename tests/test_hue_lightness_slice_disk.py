@@ -6,7 +6,6 @@ pytest.importorskip("PyQt5")
 
 from PyQt5 import QtCore, QtGui
 
-from oklab_colour_picker.colour_presentation import default_colour_presenter
 from oklab_colour_picker.selector_models import HueLightnessSliceModel
 from oklab_colour_picker.widgets import HueLightnessSliceDiskWidget
 from oklab_colour_picker.colour_state import ColourIntent
