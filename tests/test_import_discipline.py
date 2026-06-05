@@ -271,6 +271,33 @@ def test_dock_does_not_echo_colour_back_into_views_on_intent():
     assert offenders == []
 
 
+def test_dock_does_not_derive_colour_presentation():
+    """Presentation fallback is controller-owned; the dock only fans out the
+    published snapshot to views."""
+
+    path = ROOT / "oklab_colour_picker" / "dock.py"
+    source = path.read_text()
+    tree = ast.parse(source, filename=path.relative_to(ROOT).as_posix())
+    offenders = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "oklab_colour_picker.colour_presentation":
+            imported = {alias.name for alias in node.names}
+            disallowed = imported - {"PresentedColour"}
+            if disallowed:
+                offenders.append(f"imports {sorted(disallowed)} from colour_presentation")
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "present"
+        ):
+            offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}: calls present")
+
+    assert "default_colour_presenter" not in source
+    assert "ColourPresenter" not in source
+    assert offenders == []
+
+
 def test_selector_widget_does_not_dispatch_on_interaction_state_names():
     """State-pattern boundary: the Qt adapter must not branch on string state
     names. It dispatches commands to the interaction facade and reacts only to

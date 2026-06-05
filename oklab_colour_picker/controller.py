@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Protocol, Sequence
 
 import numpy as np
 
+from oklab_colour_picker.colour_presentation import (
+    ColourPresenter,
+    PresentedColour,
+    default_colour_presenter,
+)
 from oklab_colour_picker.colour_state import (
     ColourIntent,
     normalize_oklab_for_krita as _normalize_oklab_for_krita,
@@ -30,7 +36,24 @@ class ChangeKind(Enum):
     INITIAL = "initial"
 
 
-ColourListener = Callable[[ColourIntent, ChangeKind], None]
+@dataclass(frozen=True)
+class ColourSnapshot:
+    """Published colour read model.
+
+    The controller/store owns ``intent`` state, derives ``colour`` through the
+    presenter, and publishes snapshots to views. Subscribers consume this read
+    model; they do not derive fallback presentation themselves.
+    """
+
+    colour: PresentedColour
+    kind: ChangeKind
+
+    @property
+    def intent(self) -> ColourIntent:
+        return self.colour.intent
+
+
+ColourListener = Callable[[ColourSnapshot], None]
 LOGGER = logging.getLogger(__name__)
 LOCAL_INTERACTION_SYNC_GRACE_SECONDS = 0.75
 
@@ -72,11 +95,13 @@ class ColourPickerController:
         *,
         scheduler: CommitScheduler | None = None,
         foreground_timer: ForegroundTimer | None = None,
+        presenter: ColourPresenter | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._adapter = adapter
         self._scheduler = scheduler if scheduler is not None else ImmediateScheduler()
         self._foreground_timer = foreground_timer
+        self._presenter = presenter or default_colour_presenter()
         self._colour_listeners: list[ColourListener] = []
         self._selected_intent: ColourIntent | None = None
         self._pending_commit: ColourIntent | None = None
@@ -106,7 +131,7 @@ class ColourPickerController:
         if self._selected_intent is None:
             return
         try:
-            listener(self._selected_intent, ChangeKind.INITIAL)
+            listener(self._snapshot(self._selected_intent, ChangeKind.INITIAL))
         except Exception:
             LOGGER.exception("colour listener failed")
 
@@ -123,11 +148,15 @@ class ColourPickerController:
         inbound colour; this is what keeps the data flow genuinely one-way.
         """
 
+        snapshot = self._snapshot(intent, kind)
         for listener in list(self._colour_listeners):
             try:
-                listener(intent, kind)
+                listener(snapshot)
             except Exception:
                 LOGGER.exception("colour listener failed")
+
+    def _snapshot(self, intent: ColourIntent, kind: ChangeKind) -> ColourSnapshot:
+        return ColourSnapshot(self._presenter.present(intent), kind)
 
     def set_preview_colour(self, oklab: ColourIntent | Sequence[float] | None) -> None:
         """Set transient UI preview state without replacing any pending commit.

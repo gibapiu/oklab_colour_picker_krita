@@ -20,8 +20,8 @@ class PresentedColour:
     """Derived display snapshot for one controller-owned colour intent.
 
     Views consume this when painting. They must not create it themselves; the
-    dock/presenter boundary derives it from the current intent so fallback
-    policy stays centralized.
+    controller derives it from the current intent so fallback policy stays
+    centralized.
     """
 
     intent: ColourIntent

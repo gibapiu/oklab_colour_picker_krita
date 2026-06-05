@@ -13,7 +13,7 @@ import oklab_colour_picker
 from oklab_colour_picker import color_math
 from oklab_colour_picker.colour_presentation import default_colour_presenter
 from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.controller import ChangeKind
+from oklab_colour_picker.controller import ChangeKind, ColourSnapshot
 from oklab_colour_picker.dock import ColourPickerDockPanel, SelectorMode
 from oklab_colour_picker.plugin import (
     DOCK_FACTORY_ID,
@@ -1209,6 +1209,10 @@ class FakeController:
     def selected_colour(self):
         return None if self._selected_intent is None else self._selected_intent.paint_oklab
 
+    @property
+    def selected_intent(self):
+        return self._selected_intent
+
     def set_preview_colour(self, colour):
         intent = None if colour is None else self._intent_from_value(colour)
         self.previews.append(intent)
@@ -1228,14 +1232,17 @@ class FakeController:
 
     def add_colour_listener(self, listener):
         self._foreground_listeners.append(listener)
+        if self._selected_intent is not None:
+            listener(ColourSnapshot(_present(self._selected_intent), ChangeKind.INITIAL))
 
     def remove_colour_listener(self, listener):
         self._foreground_listeners.remove(listener)
 
     def _broadcast(self, colour, kind):
         self._selected_intent = self._intent_from_value(colour)
+        snapshot = ColourSnapshot(_present(self._selected_intent), kind)
         for listener in list(self._foreground_listeners):
-            listener(self._selected_intent, kind)
+            listener(snapshot)
 
     def emit_foreground(self, colour):
         self._broadcast(colour, ChangeKind.EXTERNAL)

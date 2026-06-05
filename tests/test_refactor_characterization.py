@@ -10,7 +10,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker import color_math
 from oklab_colour_picker.colour_presentation import default_colour_presenter
-from oklab_colour_picker.controller import ChangeKind
+from oklab_colour_picker.controller import ChangeKind, ColourSnapshot
 from oklab_colour_picker.dock import ColourPickerDockPanel, SelectorMode
 from oklab_colour_picker.selector_models import (
     HueLightnessSliceModel,
@@ -226,7 +226,7 @@ def test_core_controller_krita_round_trip_suppresses_self_feedback():
     adapter = FakeAdapter()
     controller = ColourPickerController(adapter, scheduler=ImmediateTestScheduler())
     observed = []
-    controller.add_colour_listener(lambda colour, kind: observed.append((colour, kind)))
+    controller.add_colour_listener(lambda snapshot: observed.append((snapshot.intent, snapshot.kind)))
     committed = np.array([0.65, 0.04, -0.02])
 
     controller.request_foreground_commit(committed)
@@ -460,14 +460,18 @@ def _send_mouse(widget, event_type, position, button, buttons):
 
 class FakeController:
     def __init__(self, *, selected_colour=None):
-        self._selected_colour = None if selected_colour is None else np.asarray(selected_colour, dtype=float).copy()
+        self._selected_intent = None if selected_colour is None else ColourIntent.from_value(selected_colour)
         self.previews = []
         self.commits = []
         self._foreground_listeners = []
 
     @property
     def selected_colour(self):
-        return None if self._selected_colour is None else self._selected_colour.copy()
+        return None if self._selected_intent is None else self._selected_intent.paint_oklab
+
+    @property
+    def selected_intent(self):
+        return self._selected_intent
 
     def set_preview_colour(self, colour):
         self.previews.append(_paint_of(colour))
@@ -481,18 +485,24 @@ class FakeController:
 
     def add_colour_listener(self, listener):
         self._foreground_listeners.append(listener)
+        if self._selected_intent is not None:
+            listener(ColourSnapshot(_present(self._selected_intent), ChangeKind.INITIAL))
 
     def remove_colour_listener(self, listener):
         self._foreground_listeners.remove(listener)
 
     def _broadcast(self, colour, kind):
-        paint = _paint_of(colour)
-        self._selected_colour = None if paint is None else np.asarray(paint, dtype=float).copy()
+        self._selected_intent = self._intent_from_value(colour)
+        snapshot = ColourSnapshot(_present(self._selected_intent), kind)
         for listener in list(self._foreground_listeners):
-            listener(self._selected_colour.copy(), kind)
+            listener(snapshot)
 
     def emit_foreground(self, colour):
         self._broadcast(colour, ChangeKind.EXTERNAL)
+
+    def _intent_from_value(self, colour):
+        fallback_hue = 0.0 if self._selected_intent is None else self._selected_intent.hue
+        return ColourIntent.from_value(colour, achromatic_hue=fallback_hue)
 
 
 class ImmediateTestScheduler:

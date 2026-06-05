@@ -43,12 +43,14 @@ flowchart LR
 <td width="55%" valign="top">
 
 The controller holds the colour. Views send the user's intent upward.
-The controller broadcasts the new colour back down. Nothing else writes colour anywhere.
+The controller derives the presented read model once and broadcasts that
+snapshot back down. Nothing else writes colour or resolves presentation anywhere.
 
 Three rules make this work:
 
 - **Every view gets every broadcast.** No "skip the view that started it". Each view decides locally whether to draw the new colour or ignore it.
 - **The colour carries two things.** OKLab paint (what Krita writes) and OKLCh coordinates (what the UI was driving with). The controller keeps the coordinates intact through Krita's round-trip - that's how a hue survives `chroma=0`.
+- **Presentation has one owner.** `ColourIntent` is controller state. `PresentedColour` is a derived read model. The controller publishes both as a `ColourSnapshot`; the dock only fans that snapshot out to views.
 - **`kind` is a hint, not an order.** `PREVIEW`, `COMMIT`, `ROLLBACK`, `EXTERNAL`, `INITIAL` - these tell a view *why* the colour arrived. They never decide whether a view should draw.
 
 </td>
@@ -59,7 +61,7 @@ flowchart TD
     U([user gesture]) --> V[Selector / Readout widget]
     V -- "previewed / committed" --> D[Dock panel]
     D --> C[Controller<br/><b>sole colour owner</b>]
-    C -- "colour_changed(intent, kind)" --> D
+    C -- "ColourSnapshot(PresentedColour, kind)" --> D
     D -- "show_colour to every view" --> V
     C <-- "ports" --> K[(Krita foreground)]
 ```
