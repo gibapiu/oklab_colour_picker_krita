@@ -13,6 +13,7 @@ def test_colour_presenter_resolves_intent_and_fallback_once():
 
     assert presentation.intent is intent
     assert presentation.fallback.source is intent
+    assert presentation.resolved_lch == presentation.fallback.resolved.selector_lch
     assert presentation.fallback.srgb8 == tuple(
         int(v) for v in color_math.oklab_to_srgb8(intent.paint_oklab)
     )

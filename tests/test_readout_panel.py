@@ -19,7 +19,6 @@ from oklab_colour_picker.widgets.readout_panel import (
     ReadoutPanel,
     _UnifiedSwatch,
     hex_to_oklab,
-    is_in_srgb_gamut,
 )
 
 
@@ -68,13 +67,12 @@ def test_hex_rejects_malformed(bad):
 
 
 def test_in_gamut_detects_displayable_colour():
-    assert is_in_srgb_gamut(color_math.srgb_to_oklab(np.array([0.5, 0.5, 0.5])))
+    assert _present(color_math.srgb_to_oklab(np.array([0.5, 0.5, 0.5]))).in_gamut
 
 
 def test_in_gamut_flags_super_saturated_oklch():
-    # A high-chroma OKLCh point that lives outside the sRGB cusp.
-    oklab = color_math.oklch_to_oklab([0.6, color_math.SRGB_MAX_CHROMA, 0.0])
-    assert not is_in_srgb_gamut(oklab)
+    super_saturated = color_math.oklch_to_oklab([0.6, color_math.SRGB_MAX_CHROMA, 0.0])
+    assert not _present(super_saturated).in_gamut
 
 
 # -- gamut-gap rendering ----------------------------------------------------

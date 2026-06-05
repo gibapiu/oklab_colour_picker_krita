@@ -11,13 +11,15 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import Sequence
 
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker import color_math, renderers
-from oklab_colour_picker.colour_presentation import PresentedColour
+from oklab_colour_picker.colour_presentation import (
+    PresentedColour,
+    require_presented_colour,
+)
 from oklab_colour_picker.colour_state import ColourIntent
 from oklab_colour_picker.controller import ChangeKind
 
@@ -78,11 +80,6 @@ def hex_to_oklab(text: str) -> np.ndarray | None:
     return color_math.srgb_to_oklab(np.array([r, g, b], dtype=float))
 
 
-def is_in_srgb_gamut(oklab: Sequence[float], *, epsilon: float = 1e-4) -> bool:
-    srgb = color_math.oklab_to_srgb(np.asarray(oklab, dtype=float))
-    return bool(color_math.in_srgb_gamut(srgb, epsilon=epsilon))
-
-
 def _perceived_luminance(r: int, g: int, b: int) -> float:
     """Simple Rec.709 luma on 0-255 sRGB bytes; good enough for ink choice."""
 
@@ -95,11 +92,6 @@ def _ink_for(r: int, g: int, b: int) -> QtGui.QColor:
 
 def _qcolor_from_srgb8(srgb8: tuple[int, int, int]) -> QtGui.QColor:
     return QtGui.QColor(int(srgb8[0]), int(srgb8[1]), int(srgb8[2]))
-
-
-def _require_presented_colour(colour: PresentedColour | None) -> None:
-    if colour is not None and not isinstance(colour, PresentedColour):
-        raise TypeError("displayed readout colours must be PresentedColour")
 
 
 class _GradientSlider(QtWidgets.QSlider):
@@ -719,7 +711,7 @@ class ReadoutPanel(QtWidgets.QWidget):
         *,
         model_factory: object | None = None,
     ) -> None:
-        _require_presented_colour(colour)
+        require_presented_colour(colour)
         # ``model_factory`` is part of the shared dock ``ColourView`` contract
         # but is selector-only; the readout has no slice model and ignores it.
         if kind is ChangeKind.INITIAL:
@@ -751,7 +743,7 @@ class ReadoutPanel(QtWidgets.QWidget):
         self,
         colour: PresentedColour | None,
     ) -> None:
-        _require_presented_colour(colour)
+        require_presented_colour(colour)
         if colour is None:
             self._previous = None
             self._swatch.set_revert_target(None)

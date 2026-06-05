@@ -29,6 +29,10 @@ class PresentedColour:
         return self.intent.selector_lch
 
     @property
+    def resolved_lch(self) -> tuple[float, float, float]:
+        return self.fallback.resolved.selector_lch
+
+    @property
     def srgb8(self) -> tuple[int, int, int]:
         return self.fallback.srgb8
 
@@ -49,6 +53,11 @@ class ColourPresenter:
     ) -> PresentedColour:
         intent = ColourIntent.from_value(colour, achromatic_hue=achromatic_hue)
         return PresentedColour(intent, self.fallback_strategy.resolve(intent))
+
+
+def require_presented_colour(colour: PresentedColour | None) -> None:
+    if colour is not None and not isinstance(colour, PresentedColour):
+        raise TypeError("displayed colours must be PresentedColour")
 
 
 def default_colour_presenter() -> ColourPresenter:

@@ -3,8 +3,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-import pytest
-
 
 ROOT = Path(__file__).resolve().parents[1]
 KRITA_IMPORT_ALLOWED = {
@@ -218,7 +216,7 @@ def test_widgets_do_not_resolve_fallback_strategy_directly():
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == "oklab_colour_picker.colour_presentation":
                 imported = {alias.name for alias in node.names}
-                disallowed = imported - {"PresentedColour"}
+                disallowed = imported - {"PresentedColour", "require_presented_colour"}
                 if disallowed:
                     offenders.append(f"{path}: imports {sorted(disallowed)} from colour_presentation")
         for node in ast.walk(tree):

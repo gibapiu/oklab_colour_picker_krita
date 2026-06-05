@@ -9,7 +9,10 @@ import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker import renderers, selector_interaction
-from oklab_colour_picker.colour_presentation import PresentedColour
+from oklab_colour_picker.colour_presentation import (
+    PresentedColour,
+    require_presented_colour,
+)
 from oklab_colour_picker.colour_state import ColourIntent
 from oklab_colour_picker.controller import normalize_oklab_for_krita
 from oklab_colour_picker.models.base import positions_close
@@ -117,7 +120,7 @@ class SelectorWidget(QtWidgets.QWidget):
         *,
         model_factory: Callable[[], SelectorModel] | None = None,
     ) -> None:
-        _require_presented_colour(colour)
+        require_presented_colour(colour)
         result = self._interaction.dispatch(
             self,
             selector_interaction.Broadcast(colour),
@@ -133,14 +136,7 @@ class SelectorWidget(QtWidgets.QWidget):
                 self.set_colour(colour)
         self.update()
 
-    def set_selected_colour(
-        self,
-        colour: PresentedColour | None,
-        kind: object | None = None,
-        *,
-        model_factory: Callable[[], SelectorModel] | None = None,
-    ) -> None:
-        self.show_colour(colour, kind, model_factory=model_factory)
+    set_selected_colour = show_colour
 
     def indicator_position(self) -> tuple[float, float] | None:
         if self._selection is None:
@@ -203,24 +199,28 @@ class SelectorWidget(QtWidgets.QWidget):
     def model_indicator(self) -> Indicator:
         if self._selection is None:
             return Indicator.nothing()
-        spec = self._model.indicator_for_intent(self._selection.selector_lch, _widget_size(self))
-        if spec is None:
+        size = _widget_size(self)
+        desired = self._model.geometric_position_for_intent(self._selection.selector_lch, size)
+        if desired is None:
             return Indicator.nothing()
-        rings = [Ring(spec.desired, True)]
-        fallback = None if self._selection.presentation is None else self._selection.presentation.fallback
-        if fallback is None:
-            return Indicator(tuple(rings))
-        fallback_position = self._model.position_for_intent(
-            fallback.fallback.selector_lch,
-            _widget_size(self),
-        )
-        if (
-            not fallback.in_gamut
-            and fallback_position is not None
-            and not positions_close(spec.desired, fallback_position)
-        ):
-            rings.append(Ring(fallback_position, False))
+        rings = [Ring(desired, solid=True)]
+        landed = self._resolved_fallback_position(desired, size)
+        if landed is not None:
+            rings.append(Ring(landed, solid=False))
         return Indicator(tuple(rings))
+
+    def _resolved_fallback_position(
+        self,
+        desired: tuple[float, float],
+        size: tuple[float, float],
+    ) -> tuple[float, float] | None:
+        presentation = self._selection.presentation
+        if presentation is None or presentation.in_gamut:
+            return None
+        landed = self._model.position_for_intent(presentation.resolved_lch, size)
+        if landed is None or positions_close(desired, landed):
+            return None
+        return landed
 
     def model_position(self) -> tuple[float, float] | None:
         if self._selection is None:
@@ -423,25 +423,14 @@ def _ring_pen(colour: QtCore.Qt.GlobalColor, width: float, *, solid: bool) -> Qt
 
 
 def _paint(colour: PresentedColour | ColourIntent | np.ndarray | Sequence[float]) -> np.ndarray:
-    if isinstance(colour, PresentedColour):
-        return colour.paint_oklab
-    if isinstance(colour, ColourIntent):
+    if isinstance(colour, (PresentedColour, ColourIntent)):
         return colour.paint_oklab
     return np.asarray(colour, dtype=float)
 
 
-def _require_presented_colour(colour: PresentedColour | None) -> None:
-    if colour is not None and not isinstance(colour, PresentedColour):
-        raise TypeError("displayed selector colours must be PresentedColour")
-
-
-def _emit_payload(
-    colour: PresentedColour | ColourIntent | np.ndarray | Sequence[float] | None,
-) -> object:
+def _emit_payload(colour: ColourIntent | np.ndarray | Sequence[float] | None) -> object:
     if colour is None:
         return None
-    if isinstance(colour, PresentedColour):
-        return colour.intent
     if isinstance(colour, ColourIntent):
         return colour
     return np.asarray(colour, dtype=float).copy()

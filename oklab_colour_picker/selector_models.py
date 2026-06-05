@@ -2,7 +2,6 @@
 
 from oklab_colour_picker.models import (
     HueLightnessSliceModel,
-    IndicatorSpec,
     LightnessChromaSliceModel,
     LightnessSliceModel,
     Position,
@@ -18,7 +17,6 @@ from oklab_colour_picker.models.geometry import (
 __all__ = [
     "disk_geometry",
     "HueLightnessSliceModel",
-    "IndicatorSpec",
     "LightnessChromaSliceModel",
     "LightnessSliceModel",
     "Position",

@@ -448,7 +448,7 @@ def test_indicator_position_stays_strict_for_out_of_gamut_leaf_colour(qtbot):
 
     colour = color_math.oklch_to_oklab([0.5, color_math.SRGB_MAX_CHROMA, 0.0])
     assert widget.model.position_for_intent(color_math.oklab_to_oklch(colour), _size(widget)) is None
-    assert widget.model.indicator_for_intent(color_math.oklab_to_oklch(colour), _size(widget)) is not None
+    assert widget.model.geometric_position_for_intent(color_math.oklab_to_oklch(colour), _size(widget)) is not None
 
     widget.set_selected_colour(_present(colour))
 
@@ -464,20 +464,21 @@ def test_out_of_gamut_indicator_uses_clipped_srgb_fallback(qtbot):
     widget.resize(101, 101)
     qtbot.addWidget(widget)
     intent = ColourIntent.from_lch(lightness, chroma, hue)
-    model_snap = model.indicator_for_intent(intent.selector_lch, _size(widget))
-    assert model_snap is not None
-    assert model_snap.snapped is not None
 
     widget.set_selected_colour(_present(intent))
     indicator = widget.model_indicator()
 
     fallback = ClippedSrgbFallbackStrategy().resolve(intent)
-    expected = model.position_for_intent(fallback.fallback.selector_lch, _size(widget))
-    assert expected is not None
+    desired = model.geometric_position_for_intent(intent.selector_lch, _size(widget))
+    landed = model.position_for_intent(fallback.resolved.selector_lch, _size(widget))
+    assert desired is not None
+    assert landed is not None
     assert len(indicator.rings) == 2
+    assert indicator.rings[0].solid is True
+    assert indicator.rings[0].position == pytest.approx(desired)
     assert indicator.rings[1].solid is False
-    assert indicator.rings[1].position == pytest.approx(expected)
-    assert indicator.rings[1].position != pytest.approx(model_snap.snapped)
+    assert indicator.rings[1].position == pytest.approx(landed)
+    assert indicator.rings[1].position != pytest.approx(desired)
 
 
 def test_out_of_gamut_indicator_omits_fallback_off_selector_slice(qtbot):

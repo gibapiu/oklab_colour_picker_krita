@@ -1,7 +1,6 @@
 """Pure OKLab selector models."""
 
 from oklab_colour_picker.models.base import (
-    IndicatorSpec,
     Position,
     SelectorModel,
     SelectorSelection,
@@ -13,7 +12,6 @@ from oklab_colour_picker.models.lightness_slice import LightnessSliceModel
 
 __all__ = [
     "HueLightnessSliceModel",
-    "IndicatorSpec",
     "LightnessChromaSliceModel",
     "LightnessSliceModel",
     "Position",

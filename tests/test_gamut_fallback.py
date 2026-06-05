@@ -13,7 +13,7 @@ def test_clipped_srgb_fallback_uses_quantized_krita_colour():
     expected_srgb8 = tuple(int(v) for v in color_math.oklab_to_srgb8(intent.paint_oklab))
     assert result.srgb8 == expected_srgb8
     np.testing.assert_allclose(
-        result.fallback.paint_oklab,
+        result.resolved.paint_oklab,
         color_math.srgb_to_oklab(np.asarray(expected_srgb8, dtype=float) / 255.0),
         atol=1e-12,
     )

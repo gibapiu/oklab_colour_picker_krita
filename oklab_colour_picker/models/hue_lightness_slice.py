@@ -11,12 +11,10 @@ import numpy.typing as npt
 
 from oklab_colour_picker import color_math
 from oklab_colour_picker.models.base import (
-    IndicatorSpec,
     OKLCh,
     Position,
     SelectorModel,
     SelectorSelection,
-    indicator_from_positions,
 )
 from oklab_colour_picker.models.geometry import (
     circle_geometry,
@@ -106,23 +104,14 @@ class HueLightnessSliceModel(SelectorModel):
         return oklab, valid
 
     def position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
-        bounds = size_bounds(size)
-        if bounds is None:
+        geometric = self.geometric_position_for_intent(lch, size)
+        if geometric is None:
             return None
-
-        width, height = bounds
-        lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
-        if not -LIGHTNESS_EPSILON <= lightness <= 1.0 + LIGHTNESS_EPSILON:
-            return None
-        if not _on_fixed_chroma_slice(chroma, self.chroma):
-            return None
-
-        lightness = float(np.clip(lightness, 0.0, 1.0))
-        hue = self._positioning_hue_for_colour_chroma(chroma, hue)
+        lightness = float(np.clip(float(lch[0]), 0.0, 1.0))
+        hue = self._positioning_hue_for_colour_chroma(float(lch[1]), float(lch[2]))
         if self.chroma > color_math.max_chroma_for_lh(lightness, hue) + CHROMA_EPSILON:
             return None
-
-        return position_from_circle(1.0 - lightness, hue, (width, height))
+        return geometric
 
     def snapped_selector_selection_at_position(
         self, position: Sequence[float], size: Sequence[float]
@@ -136,15 +125,7 @@ class HueLightnessSliceModel(SelectorModel):
             position_from_circle(1.0 - lightness, hue, size),
         )
 
-    def indicator_for_intent(
-        self, lch: OKLCh, size: Sequence[float]
-    ) -> IndicatorSpec | None:
-        return indicator_from_positions(
-            self._desired_position_for_intent(lch, size),
-            self._snapped_position_for_intent(lch, size),
-        )
-
-    def _desired_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
+    def geometric_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         bounds = size_bounds(size)
         if bounds is None:
             return None
@@ -157,21 +138,6 @@ class HueLightnessSliceModel(SelectorModel):
         lightness = float(np.clip(lightness, 0.0, 1.0))
         hue = self._positioning_hue_for_colour_chroma(chroma, hue)
         return position_from_circle(1.0 - lightness, hue, (width, height))
-
-    def _snapped_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
-        bounds = size_bounds(size)
-        if bounds is None:
-            return None
-        width, height = bounds
-        lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
-        if not _on_fixed_chroma_slice(chroma, self.chroma):
-            return None
-        hue = self._positioning_hue_for_colour_chroma(chroma, hue)
-        lightness = float(np.clip(lightness, 0.0, 1.0))
-        snapped = _snap_lightness_to_gamut(self.chroma, hue, lightness)
-        if snapped is None:
-            return None
-        return position_from_circle(1.0 - snapped, hue, (width, height))
 
     def _positioning_hue_for_colour_chroma(self, chroma: float, hue: float) -> float:
         if (
