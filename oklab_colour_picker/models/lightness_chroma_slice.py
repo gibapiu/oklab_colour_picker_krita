@@ -11,12 +11,10 @@ import numpy.typing as npt
 
 from oklab_colour_picker import color_math
 from oklab_colour_picker.models.base import (
-    IndicatorSpec,
     OKLCh,
     Position,
     SelectorModel,
     SelectorSelection,
-    indicator_from_positions,
 )
 from oklab_colour_picker.models.geometry import (
     empty_color_grid,
@@ -101,30 +99,14 @@ class LightnessChromaSliceModel(SelectorModel):
         return oklab, valid
 
     def position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
-        bounds = size_bounds(size)
-        if bounds is None:
+        geometric = self.geometric_position_for_intent(lch, size)
+        if geometric is None:
             return None
-
-        width, height = bounds
-        lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
-        if not -LIGHTNESS_EPSILON <= lightness <= 1.0 + LIGHTNESS_EPSILON:
+        lightness = float(np.clip(float(lch[0]), 0.0, 1.0))
+        chroma = max(0.0, float(lch[1]))
+        if chroma > color_math.max_chroma_for_lh(lightness, self.hue) + CHROMA_EPSILON:
             return None
-        if not _on_hue_slice(chroma, hue, self.hue):
-            return None
-
-        lightness = float(np.clip(lightness, 0.0, 1.0))
-        chroma = max(0.0, chroma)
-        max_chroma = color_math.max_chroma_for_lh(lightness, self.hue)
-        if chroma > max_chroma + CHROMA_EPSILON:
-            return None
-        if chroma > color_math.SRGB_MAX_CHROMA + CHROMA_EPSILON:
-            return None
-
-        chroma_fraction = min(chroma / color_math.SRGB_MAX_CHROMA, 1.0)
-        return (
-            float(chroma_fraction * (width - 1.0)),
-            float((1.0 - lightness) * (height - 1.0)),
-        )
+        return geometric
 
     def snapped_selector_selection_at_position(
         self, position: Sequence[float], size: Sequence[float]
@@ -148,15 +130,7 @@ class LightnessChromaSliceModel(SelectorModel):
         chroma = max(0.0, min(desired_chroma, max_chroma))
         return (float(lightness), float(chroma), float(self.hue))
 
-    def indicator_for_intent(
-        self, lch: OKLCh, size: Sequence[float]
-    ) -> IndicatorSpec | None:
-        return indicator_from_positions(
-            self._desired_position_for_intent(lch, size),
-            self._snapped_position_for_intent(lch, size),
-        )
-
-    def _desired_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
+    def geometric_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         bounds = size_bounds(size)
         if bounds is None:
             return None
@@ -170,23 +144,6 @@ class LightnessChromaSliceModel(SelectorModel):
             return None
         lightness = float(np.clip(lightness, 0.0, 1.0))
         chroma_fraction = float(np.clip(max(0.0, chroma) / color_math.SRGB_MAX_CHROMA, 0.0, 1.0))
-        return (
-            float(chroma_fraction * (width - 1.0)),
-            float((1.0 - lightness) * (height - 1.0)),
-        )
-
-    def _snapped_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
-        bounds = size_bounds(size)
-        if bounds is None:
-            return None
-        width, height = bounds
-        lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
-        if not _on_hue_slice(chroma, hue, self.hue):
-            return None
-        lightness = float(np.clip(lightness, 0.0, 1.0))
-        max_chroma = float(color_math.max_chroma_for_lh(lightness, self.hue))
-        clamped = max(0.0, min(chroma, max_chroma))
-        chroma_fraction = float(np.clip(clamped / color_math.SRGB_MAX_CHROMA, 0.0, 1.0))
         return (
             float(chroma_fraction * (width - 1.0)),
             float((1.0 - lightness) * (height - 1.0)),

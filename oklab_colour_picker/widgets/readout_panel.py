@@ -11,12 +11,15 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import Enum
-from typing import Sequence
 
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker import color_math, renderers
+from oklab_colour_picker.colour_presentation import (
+    PresentedColour,
+    require_presented_colour,
+)
 from oklab_colour_picker.colour_state import ColourIntent
 from oklab_colour_picker.controller import ChangeKind
 
@@ -58,21 +61,8 @@ class _EditExit(Enum):
 
 @dataclass(frozen=True)
 class _LatchedColour:
-    intent: ColourIntent
+    colour: PresentedColour
     committed: bool
-
-
-def oklab_to_qcolor(oklab: Sequence[float]) -> QtGui.QColor:
-    """Return a clipped sRGB ``QColor`` for the OKLab colour."""
-
-    srgb = color_math.clip_srgb(color_math.oklab_to_srgb(np.asarray(oklab, dtype=float)))
-    return QtGui.QColor.fromRgbF(float(srgb[0]), float(srgb[1]), float(srgb[2]))
-
-
-def oklab_to_hex(oklab: Sequence[float]) -> str:
-    """Return ``#rrggbb`` for the OKLab colour, clipping to sRGB if needed."""
-
-    return oklab_to_qcolor(oklab).name(QtGui.QColor.HexRgb)
 
 
 def hex_to_oklab(text: str) -> np.ndarray | None:
@@ -90,11 +80,6 @@ def hex_to_oklab(text: str) -> np.ndarray | None:
     return color_math.srgb_to_oklab(np.array([r, g, b], dtype=float))
 
 
-def is_in_srgb_gamut(oklab: Sequence[float], *, epsilon: float = 1e-4) -> bool:
-    srgb = color_math.oklab_to_srgb(np.asarray(oklab, dtype=float))
-    return bool(color_math.in_srgb_gamut(srgb, epsilon=epsilon))
-
-
 def _perceived_luminance(r: int, g: int, b: int) -> float:
     """Simple Rec.709 luma on 0-255 sRGB bytes; good enough for ink choice."""
 
@@ -103,6 +88,10 @@ def _perceived_luminance(r: int, g: int, b: int) -> float:
 
 def _ink_for(r: int, g: int, b: int) -> QtGui.QColor:
     return _DARK_INK if _perceived_luminance(r, g, b) > 0.55 else _LIGHT_INK
+
+
+def _qcolor_from_srgb8(srgb8: tuple[int, int, int]) -> QtGui.QColor:
+    return QtGui.QColor(int(srgb8[0]), int(srgb8[1]), int(srgb8[2]))
 
 
 class _GradientSlider(QtWidgets.QSlider):
@@ -479,21 +468,20 @@ class _UnifiedSwatch(QtWidgets.QWidget):
 
     # -- Public state --------------------------------------------------
 
-    def set_colour(self, oklab: Sequence[float] | None) -> None:
-        if oklab is None:
-            self._colour = QtGui.QColor(0, 0, 0, 0)
-            self._hex_text = "#000000"
-        else:
-            self._colour = oklab_to_qcolor(oklab)
-            self._hex_text = self._colour.name(QtGui.QColor.HexRgb)
+    def set_srgb8(self, srgb8: tuple[int, int, int]) -> None:
+        self._colour = _qcolor_from_srgb8(srgb8)
+        self._hex_text = self._colour.name(QtGui.QColor.HexRgb)
+        self._sync_hex_editor()
+        self._apply_ink_styles()
+        self.update()
+
+    def _sync_hex_editor(self) -> None:
         if not self._editing and self._hex_edit.text().lower() != self._hex_text:
             self._suppress_finish = True
             try:
                 self._hex_edit.setText(self._hex_text)
             finally:
                 self._suppress_finish = False
-        self._apply_ink_styles()
-        self.update()
 
     def set_oog_visible(self, visible: bool) -> None:
         self._oog_visible = bool(visible)
@@ -636,14 +624,16 @@ class ReadoutPanel(QtWidgets.QWidget):
     previewed = QtCore.pyqtSignal(object)
     committed = QtCore.pyqtSignal(object)
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
-        self._current_intent: ColourIntent | None = None
-        self._previous_intent: ColourIntent | None = None
-        self._current_oklab: np.ndarray | None = None
-        self._previous_oklab: np.ndarray | None = None
+        self._current: PresentedColour | None = None
+        self._previous: PresentedColour | None = None
         self._state = _ReadoutState.IDLE
         self._latched_colour: _LatchedColour | None = None
+        self._draft_intent: ColourIntent | None = None
 
         self._swatch = _UnifiedSwatch(self)
         self._swatch.edit_started.connect(self._begin_edit)
@@ -663,10 +653,14 @@ class ReadoutPanel(QtWidgets.QWidget):
             row.editCancelled.connect(self._cancel_edit)
 
         self._build_layout()
-        # Initial slider tracks at a sensible default so the panel paints
-        # something before the first colour arrives.
-        self.show_colour(np.array([0.5, 0.0, 0.0], dtype=float))
-        self._previous_oklab = None
+        initial_srgb8 = tuple(int(v) for v in color_math.oklab_to_srgb8(np.array([0.5, 0.0, 0.0], dtype=float)))
+        self._row_l.set_value(0.5)
+        self._row_c.set_value(0.0)
+        self._row_h.set_value(0.0)
+        self._swatch.set_srgb8(initial_srgb8)
+        self._refresh_tracks(0.5, 0.0, 0.0)
+        self._refresh_handle_fallback(initial_srgb8)
+        self._previous = None
         self._swatch.set_revert_target(None)
 
     def _build_layout(self) -> None:
@@ -689,90 +683,122 @@ class ReadoutPanel(QtWidgets.QWidget):
     def hue_intent(self) -> float:
         if self._state is _ReadoutState.EDITING:
             return math.radians(self._row_h.value()) % math.tau
-        if self._current_intent is None:
+        if self._current is not None and color_math.is_achromatic_chroma(self._current.intent.chroma):
+            return math.radians(self._row_h.value()) % math.tau
+        if self._current is None:
             return 0.0
-        return self._current_intent.hue
+        return self._current.intent.hue
+
+    @property
+    def _current_intent(self) -> ColourIntent | None:
+        return None if self._current is None else self._current.intent
+
+    @property
+    def _previous_intent(self) -> ColourIntent | None:
+        return None if self._previous is None else self._previous.intent
+
+    @property
+    def _current_oklab(self) -> np.ndarray | None:
+        return None if self._current is None else self._current.paint_oklab
+
+    @property
+    def _previous_oklab(self) -> np.ndarray | None:
+        return None if self._previous is None else self._previous.paint_oklab
 
     def show_colour(
         self,
-        oklab: ColourIntent | Sequence[float] | None,
+        colour: PresentedColour | None,
         kind: object | None = None,
         *,
         model_factory: object | None = None,
     ) -> None:
+        require_presented_colour(colour)
         # ``model_factory`` is part of the shared dock ``ColourView`` contract
         # but is selector-only; the readout has no slice model and ignores it.
         if kind is ChangeKind.INITIAL:
             # INITIAL is a seed, not a user commit: adopt it as current *and*
             # the revert baseline so a placeholder seed never becomes a bogus
             # previous colour.
-            self._set_current_colour(oklab, committed=False)
-            self.set_previous_colour(oklab)
+            self._set_current_colour(colour, committed=False)
+            self.set_previous_colour(colour)
             return
-        self._set_current_colour(oklab, committed=kind is not ChangeKind.PREVIEW)
+        self._set_current_colour(
+            colour,
+            committed=kind is not ChangeKind.PREVIEW,
+            preview=kind is ChangeKind.PREVIEW,
+        )
 
     def _set_current_colour(
-        self, oklab: ColourIntent | Sequence[float] | None, *, committed: bool
+        self,
+        colour: PresentedColour | None,
+        *,
+        committed: bool,
+        preview: bool = False,
     ) -> None:
-        """Update sliders, swatch, and hex without emitting signals.
-
-        When ``committed`` is False the display updates but the previous
-        swatch is left alone — preview samples (mid-drag) must not clobber
-        the revert target.
-        """
-        if oklab is None:
+        if colour is None:
             return
-        intent = ColourIntent.from_value(oklab, achromatic_hue=self.hue_intent)
         if self._state is _ReadoutState.EDITING:
-            self._latched_colour = _LatchedColour(intent=intent, committed=committed)
+            if preview and colour.intent == self._draft_intent:
+                l, c, h = colour.intent.selector_lch
+                self._sync_readout_presentation(colour, float(l), float(c), float(h))
+                return
+            self._latched_colour = _LatchedColour(
+                colour=colour,
+                committed=committed,
+            )
             return
-        self._apply_colour(intent, committed=committed)
+        self._apply_colour(colour, committed=committed)
 
-    def set_previous_colour(self, oklab: ColourIntent | Sequence[float] | None) -> None:
-        """Seed the revert target directly (e.g. from initial Krita FG)."""
-        if oklab is None:
-            self._previous_intent = None
-            self._previous_oklab = None
+    def set_previous_colour(
+        self,
+        colour: PresentedColour | None,
+    ) -> None:
+        require_presented_colour(colour)
+        if colour is None:
+            self._previous = None
             self._swatch.set_revert_target(None)
             return
-        self._previous_intent = ColourIntent.from_value(oklab, achromatic_hue=self.hue_intent)
-        self._previous_oklab = self._previous_intent.paint_oklab
-        self._swatch.set_revert_target(oklab_to_hex(self._previous_oklab))
+        self._previous = colour
+        self._swatch.set_revert_target(self._hex_for_colour(self._previous))
 
     # -- Internal sync -------------------------------------------------
 
-    def _apply_colour(self, intent: ColourIntent, *, committed: bool) -> None:
-        colour = intent.paint_oklab
+    def _apply_colour(self, colour: PresentedColour, *, committed: bool) -> None:
         if (
             committed
-            and self._current_intent is not None
-            and self._current_oklab is not None
-            and intent != self._current_intent
+            and self._current is not None
+            and colour.intent != self._current.intent
         ):
-            self._previous_intent = self._current_intent
-            self._previous_oklab = self._current_oklab.copy()
-            self._swatch.set_revert_target(oklab_to_hex(self._previous_oklab))
-        self._current_intent = intent
-        self._current_oklab = colour
-        self._sync_widgets_to_colour(intent)
+            self._previous = self._current
+            self._swatch.set_revert_target(self._hex_for_colour(self._previous))
+        self._current = colour
+        self._sync_widgets_to_colour(colour)
 
-    def _sync_widgets_to_colour(self, intent: ColourIntent) -> None:
+    def _hex_for_colour(self, colour: PresentedColour) -> str:
+        return _qcolor_from_srgb8(colour.srgb8).name(QtGui.QColor.HexRgb)
+
+    def _sync_widgets_to_colour(self, colour: PresentedColour) -> None:
+        intent = colour.intent
         l, c, h = intent.selector_lch
         self._row_l.set_value(float(l))
         self._row_c.set_value(float(c))
         self._row_h.set_value(math.degrees(h))
-        self._sync_readout_presentation(intent.paint_oklab, float(l), float(c), float(h))
+        self._sync_readout_presentation(colour, float(l), float(c), float(h))
 
     def _sync_readout_presentation(
-        self, oklab: np.ndarray, lightness: float, chroma: float, hue: float
+        self,
+        colour: PresentedColour,
+        lightness: float,
+        chroma: float,
+        hue: float,
     ) -> None:
-        self._swatch.set_colour(oklab)
-        self._swatch.set_oog_visible(not is_in_srgb_gamut(oklab))
+        self._swatch.set_srgb8(colour.srgb8)
+        self._swatch.set_oog_visible(not colour.in_gamut)
         self._refresh_tracks(lightness, chroma, hue)
-        self._refresh_handle_fallback(oklab)
+        self._refresh_handle_fallback(colour.srgb8)
 
-    def _refresh_handle_fallback(self, oklab: np.ndarray) -> None:
-        colour = oklab_to_qcolor(oklab)
+    def _refresh_handle_fallback(self, srgb8: tuple[int, int, int]) -> None:
+        colour = _qcolor_from_srgb8(srgb8)
         for row in (self._row_l, self._row_c, self._row_h):
             row.slider.set_fallback_colour(colour)
 
@@ -810,8 +836,8 @@ class ReadoutPanel(QtWidgets.QWidget):
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # type: ignore[override]
         super().resizeEvent(event)
-        if self._current_intent is not None:
-            l, c, h = self._current_intent.selector_lch
+        if self._current is not None:
+            l, c, h = self._current.selector_lch
             self._refresh_tracks(l, c, h)
 
     # -- Slot wiring ---------------------------------------------------
@@ -823,11 +849,13 @@ class ReadoutPanel(QtWidgets.QWidget):
                 self._row_c.value(),
                 math.radians(self._row_h.value()) % math.tau,
             )
-        if self._current_oklab is None:
+        if self._current is None:
             return 0.5, 0.0, self.hue_intent
-        if self._current_intent is None:
-            return 0.5, 0.0, self.hue_intent
-        return self._current_intent.selector_lch
+        return (
+            self._row_l.value(),
+            self._row_c.value(),
+            math.radians(self._row_h.value()) % math.tau,
+        )
 
     def _emit_from_lch(self, lightness: float, chroma: float, hue_rad: float, committed: bool) -> None:
         intent = ColourIntent.from_lch(lightness, chroma, hue_rad)
@@ -835,8 +863,7 @@ class ReadoutPanel(QtWidgets.QWidget):
             self._finish_user_commit(intent)
             return
         self._begin_edit()
-        l, c, h = intent.selector_lch
-        self._sync_readout_presentation(intent.paint_oklab, l, c, h)
+        self._draft_intent = intent
         self.previewed.emit(intent)
 
     def _on_l_changed(self, value: float, committed: bool) -> None:
@@ -855,17 +882,16 @@ class ReadoutPanel(QtWidgets.QWidget):
         oklab = hex_to_oklab(text)
         if oklab is None:
             # Restore the swatch to the current colour on malformed input.
-            if self._current_oklab is not None:
-                self._swatch.set_colour(self._current_oklab)
+            if self._current is not None:
+                self._swatch.set_srgb8(self._current.srgb8)
             self._finish_edit(_EditExit.CANCEL)
             return
-        intent = ColourIntent.from_oklab(oklab, achromatic_hue=self.hue_intent)
-        self._finish_user_commit(intent)
+        self._finish_user_commit(ColourIntent.from_oklab(oklab, achromatic_hue=self.hue_intent))
 
     def _on_previous_clicked(self) -> None:
-        if self._previous_intent is None:
+        if self._previous is None:
             return
-        self._finish_user_commit(self._previous_intent)
+        self._finish_user_commit(self._previous.intent)
 
     def _begin_edit(self) -> None:
         if self._state is _ReadoutState.EDITING:
@@ -878,7 +904,6 @@ class ReadoutPanel(QtWidgets.QWidget):
 
     def _finish_user_commit(self, intent: ColourIntent) -> None:
         self._finish_edit(_EditExit.COMMIT)
-        self._apply_colour(intent, committed=True)
         self.committed.emit(intent)
 
     def _finish_edit(self, exit_kind: _EditExit) -> None:
@@ -887,5 +912,8 @@ class ReadoutPanel(QtWidgets.QWidget):
         latched = self._latched_colour
         self._state = _ReadoutState.IDLE
         self._latched_colour = None
+        self._draft_intent = None
         if exit_kind is _EditExit.CANCEL and latched is not None:
-            self._apply_colour(latched.intent, committed=latched.committed)
+            self._apply_colour(latched.colour, committed=latched.committed)
+        elif exit_kind is _EditExit.CANCEL and self._current is not None:
+            self._sync_widgets_to_colour(self._current)

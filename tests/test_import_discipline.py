@@ -3,8 +3,6 @@ import importlib.util
 import sys
 from pathlib import Path
 
-import pytest
-
 
 ROOT = Path(__file__).resolve().parents[1]
 KRITA_IMPORT_ALLOWED = {
@@ -13,8 +11,10 @@ KRITA_IMPORT_ALLOWED = {
     Path("oklab_colour_picker/krita_adapter.py"),
 }
 PURE_NO_QT_OR_KRITA = {
+    Path("oklab_colour_picker/colour_presentation.py"),
     Path("oklab_colour_picker/colour_state.py"),
     Path("oklab_colour_picker/color_math.py"),
+    Path("oklab_colour_picker/gamut_fallback.py"),
     Path("oklab_colour_picker/renderers.py"),
     Path("oklab_colour_picker/selector_interaction.py"),
     Path("oklab_colour_picker/selector_models.py"),
@@ -30,8 +30,10 @@ SET_FOREGROUND_ALLOWED = {
     Path("oklab_colour_picker/krita_adapter.py"),
 }
 LOWER_LAYER_FILES = {
+    Path("oklab_colour_picker/colour_presentation.py"),
     Path("oklab_colour_picker/colour_state.py"),
     Path("oklab_colour_picker/color_math.py"),
+    Path("oklab_colour_picker/gamut_fallback.py"),
     Path("oklab_colour_picker/renderers.py"),
     Path("oklab_colour_picker/selector_interaction.py"),
     Path("oklab_colour_picker/selector_models.py"),
@@ -44,8 +46,10 @@ LOWER_LAYER_FILES = {
     Path("oklab_colour_picker/controller.py"),
 }
 LOWER_LAYER_TESTS = {
+    "oklab_colour_picker.colour_presentation": Path("tests/test_colour_presentation.py"),
     "oklab_colour_picker.colour_state": Path("tests/test_colour_state.py"),
     "oklab_colour_picker.color_math": Path("tests/test_color_math.py"),
+    "oklab_colour_picker.gamut_fallback": Path("tests/test_gamut_fallback.py"),
     "oklab_colour_picker.models": Path("tests/test_selector_models.py"),
     "oklab_colour_picker.renderers": Path("tests/test_renderers.py"),
     "oklab_colour_picker.selector_interaction": Path("tests/test_selector_interaction.py"),
@@ -200,6 +204,34 @@ def test_selector_widget_uses_explicit_model_contract():
     assert probes == []
 
 
+def test_widgets_do_not_resolve_fallback_strategy_directly():
+    offenders = []
+    widgets_dir = ROOT / "oklab_colour_picker" / "widgets"
+    for full_path in sorted(widgets_dir.rglob("*.py")):
+        path = full_path.relative_to(ROOT)
+        tree = ast.parse(full_path.read_text(), filename=path.as_posix())
+        imports = set(_project_import_references(tree, path))
+        if "oklab_colour_picker.gamut_fallback" in imports:
+            offenders.append(f"{path}: imports gamut_fallback")
+        if "present_colour" in full_path.read_text():
+            offenders.append(f"{path}: accepts presenter callback")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "oklab_colour_picker.colour_presentation":
+                imported = {alias.name for alias in node.names}
+                disallowed = imported - {"PresentedColour", "require_presented_colour"}
+                if disallowed:
+                    offenders.append(f"{path}: imports {sorted(disallowed)} from colour_presentation")
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"present", "resolve"}
+            ):
+                offenders.append(f"{path}:{node.lineno}: calls {node.func.attr}")
+
+    assert offenders == []
+
+
 def test_selector_widget_keeps_no_absolute_pixel_indicator_memory():
     """The deleted ``_last_interaction_position`` family must never come back;
     an anchor lives only inside an interaction state, not as persistent
@@ -236,6 +268,33 @@ def test_dock_does_not_echo_colour_back_into_views_on_intent():
             ):
                 offenders.append(f"{node.name}: {call.func.attr}")
 
+    assert offenders == []
+
+
+def test_dock_does_not_derive_colour_presentation():
+    """Presentation fallback is controller-owned; the dock only fans out the
+    published snapshot to views."""
+
+    path = ROOT / "oklab_colour_picker" / "dock.py"
+    source = path.read_text()
+    tree = ast.parse(source, filename=path.relative_to(ROOT).as_posix())
+    offenders = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "oklab_colour_picker.colour_presentation":
+            imported = {alias.name for alias in node.names}
+            disallowed = imported - {"PresentedColour"}
+            if disallowed:
+                offenders.append(f"imports {sorted(disallowed)} from colour_presentation")
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "present"
+        ):
+            offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}: calls present")
+
+    assert "default_colour_presenter" not in source
+    assert "ColourPresenter" not in source
     assert offenders == []
 
 

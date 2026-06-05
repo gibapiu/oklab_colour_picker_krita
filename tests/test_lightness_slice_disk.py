@@ -16,8 +16,18 @@ from oklab_colour_picker.widgets import LightnessSliceDiskWidget
 from oklab_colour_picker.colour_state import ColourIntent
 
 
+def _widget(model):
+    return LightnessSliceDiskWidget(model)
+
+
+def _selector(model):
+    from oklab_colour_picker.widgets.selector import SelectorWidget
+
+    return SelectorWidget(model)
+
+
 def test_disk_widget_picks_through_overlay(qtbot):
-    widget = LightnessSliceDiskWidget(LightnessSliceModel(lightness=0.6))
+    widget = _widget(LightnessSliceModel(lightness=0.6))
     widget.resize(120, 120)
     qtbot.addWidget(widget)
     widget.show()
@@ -44,12 +54,12 @@ def test_disk_widget_renders_overlay_pixels_on_top_of_base(qtbot):
     from oklab_colour_picker.widgets.selector import SelectorWidget
 
     model = LightnessSliceModel(lightness=0.5)
-    overlay = LightnessSliceDiskWidget(model)
+    overlay = _widget(model)
     overlay.resize(81, 81)
     qtbot.addWidget(overlay)
     overlay.show()
 
-    bare = SelectorWidget(model)
+    bare = _selector(model)
     bare.resize(81, 81)
     qtbot.addWidget(bare)
     bare.show()
@@ -96,7 +106,7 @@ def _render_to_rgba_array(widget) -> np.ndarray:
 
 
 def test_set_model_invalidates_gamut_path_cache(qtbot):
-    widget = LightnessSliceDiskWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(80, 80)
     qtbot.addWidget(widget)
     widget.show()
@@ -116,7 +126,7 @@ def test_set_model_invalidates_gamut_path_cache(qtbot):
 
 
 def test_gamut_contour_uses_180_hue_samples(qtbot):
-    widget = LightnessSliceDiskWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(80, 80)
     qtbot.addWidget(widget)
     widget.show()
@@ -128,7 +138,7 @@ def test_gamut_contour_uses_180_hue_samples(qtbot):
 
 
 def test_resize_invalidates_gamut_path_cache(qtbot):
-    widget = LightnessSliceDiskWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(80, 80)
     qtbot.addWidget(widget)
     widget.show()
@@ -143,7 +153,7 @@ def test_resize_invalidates_gamut_path_cache(qtbot):
 
 
 def test_resize_reuses_expensive_gamut_contour_cache(qtbot, monkeypatch):
-    widget = LightnessSliceDiskWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(80, 80)
     qtbot.addWidget(widget)
     widget.show()
@@ -166,7 +176,7 @@ def test_gamut_path_caps_at_disk_radius(qtbot):
     # Pick a lightness whose cusp chroma is comfortably below the disk's
     # radial extent, so every sample on the contour should sit strictly
     # inside the rim.
-    widget = LightnessSliceDiskWidget(LightnessSliceModel(lightness=0.95))
+    widget = _widget(LightnessSliceModel(lightness=0.95))
     widget.resize(101, 101)
     qtbot.addWidget(widget)
     widget.show()
@@ -193,7 +203,7 @@ def test_drag_past_gamut_leaf_snaps_to_cusp_at_cursor_hue(qtbot):
     # but that pin tracks the colour from a few pixels in, not the cursor's
     # current hue. With snap, the drag commits the in-gamut *cusp* chroma at
     # the cursor's hue — even when the cursor is well past the leaf.
-    widget = LightnessSliceDiskWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(101, 101)
     qtbot.addWidget(widget)
     widget.show()
@@ -226,7 +236,7 @@ def test_hover_outside_drag_does_not_snap(qtbot):
     # Snapping is drag-only — strict in-gamut picking (color_at) outside a
     # drag still returns None past the leaf, so keyboard nav and other
     # non-drag callers see strict in-gamut behaviour.
-    widget = LightnessSliceDiskWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(101, 101)
     qtbot.addWidget(widget)
     widget.show()
@@ -239,7 +249,7 @@ def test_click_without_drag_on_out_of_gamut_does_not_snap(qtbot):
     # transparent pixel inside the disk circle must NOT commit a snapped
     # cusp colour — otherwise tapping anywhere on the disk would land a
     # boundary pick. Snap is reserved for actual drags.
-    widget = LightnessSliceDiskWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(101, 101)
     qtbot.addWidget(widget)
     widget.show()
@@ -267,7 +277,7 @@ def test_drag_resumes_snapping_after_cursor_re_enters(qtbot):
     # NOT close the snap window for the rest of the same drag —
     # subsequent moves with the left button still held need to keep
     # snapping at the cursor's hue.
-    widget = LightnessSliceDiskWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(101, 101)
     qtbot.addWidget(widget)
     widget.show()
@@ -300,4 +310,3 @@ def _paint_of(c):
     if c is None:
         return None
     return c.paint_oklab if isinstance(c, ColourIntent) else c
-

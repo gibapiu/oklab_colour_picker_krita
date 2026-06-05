@@ -11,8 +11,9 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 import oklab_colour_picker
 from oklab_colour_picker import color_math
+from oklab_colour_picker.colour_presentation import PresentedColour, default_colour_presenter
 from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.controller import ChangeKind
+from oklab_colour_picker.controller import ChangeKind, ColourPickerController, ColourSnapshot
 from oklab_colour_picker.dock import ColourPickerDockPanel, SelectorMode
 from oklab_colour_picker.plugin import (
     DOCK_FACTORY_ID,
@@ -23,6 +24,11 @@ from oklab_colour_picker.plugin import (
 from oklab_colour_picker.widgets import HueLightnessSliceDiskWidget
 import oklab_colour_picker.dock as dock_module
 import oklab_colour_picker.plugin as plugin_module
+from tests.helpers import presented_colour
+
+
+def _present(colour):
+    return default_colour_presenter().present(colour)
 
 
 def test_dock_panel_constructs_all_selector_views_and_switches_modes(qtbot):
@@ -114,6 +120,69 @@ def test_selector_signals_update_controller_and_sibling_indicators(qtbot):
     np.testing.assert_allclose(controller.commits[-1].paint_oklab, colour)
     for widget in panel.selector_widgets:
         np.testing.assert_allclose(widget.selected_colour, colour)
+
+
+def test_controller_presents_once_and_dock_fans_same_snapshot_to_views(qtbot, monkeypatch):
+    presenter = SpyPresenter()
+    controller = ColourPickerController(
+        NullForegroundAdapter(),
+        scheduler=ImmediateTestScheduler(),
+        presenter=presenter,
+    )
+    panel = ColourPickerDockPanel(controller)
+    qtbot.addWidget(panel)
+    _ = panel.selector_widgets
+
+    view_calls = []
+
+    def spy_view(name, view):
+        original = view.show_colour
+
+        def record(colour, kind, **kwargs):
+            view_calls.append((name, colour, kind))
+            return original(colour, kind, **kwargs)
+
+        monkeypatch.setattr(view, "show_colour", record)
+
+    spy_view("readout", panel._readout_panel)
+    for mode, widget in panel._selectors.items():
+        spy_view(mode.value, widget)
+
+    intent = ColourIntent.from_lch(0.52, 0.04, math.radians(135.0))
+    controller.set_preview_colour(intent)
+
+    assert presenter.presented == [intent]
+    assert {name for name, _colour, _kind in view_calls} == {
+        "readout",
+        "lightness_slice",
+        "hue_lightness_slice",
+        "lightness_chroma_slice",
+    }
+    assert {id(colour) for _name, colour, _kind in view_calls} == {
+        id(presenter.snapshots[0])
+    }
+    assert {kind for _name, _colour, kind in view_calls} == {ChangeKind.PREVIEW}
+
+
+def test_selector_widget_signals_emit_intent_not_presentation(qtbot):
+    controller = FakeController()
+    panel = ColourPickerDockPanel(controller)
+    qtbot.addWidget(panel)
+    panel.set_mode(SelectorMode.LIGHTNESS_CHROMA_SLICE)
+    active = panel.active_selector
+    active.resize(120, 80)
+
+    payloads = []
+    active.previewed.connect(lambda colour: payloads.append(colour))
+    active.committed.connect(lambda colour: payloads.append(colour))
+    point = QtCore.QPoint(40, 20)
+
+    _send_mouse(active, QtCore.QEvent.MouseButtonPress, point, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
+    _send_mouse(active, QtCore.QEvent.MouseButtonRelease, point, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+
+    assert payloads
+    assert all(isinstance(payload, ColourIntent) for payload in payloads if payload is not None)
+    assert not any(isinstance(payload, PresentedColour) for payload in payloads)
 
 
 def test_real_controller_normalized_commit_echo_keeps_emitter_pinned(qtbot):
@@ -608,7 +677,7 @@ def test_indicator_maps_to_same_colour_after_resize(qtbot):
     widget.resize(80, 40)
     colour = widget.model.color_at_position((30, 12), (80, 40))
     assert colour is not None
-    widget.set_selected_colour(colour)
+    widget.set_selected_colour(_present(colour))
 
     widget.resize(160, 90)
     actual = widget.indicator_position()
@@ -627,7 +696,7 @@ def test_selector_preview_then_commit_preserves_previous_swatch(qtbot):
     colour_a = color_math.oklch_to_oklab([0.50, 0.05, math.pi / 6.0])
     colour_b = color_math.oklch_to_oklab([0.60, 0.08, math.pi / 3.0])
     panel.set_selected_colour(colour_a, committed=True)
-    panel._readout_panel.set_previous_colour(colour_a)
+    panel._readout_panel.set_previous_colour(_present(colour_a))
 
     selector = panel.active_selector
     selector.previewed.emit(np.asarray(colour_b, dtype=float).copy())
@@ -645,7 +714,7 @@ def test_readout_commit_signal_preserves_previous_swatch(qtbot):
     colour_a = color_math.oklch_to_oklab([0.50, 0.05, math.pi / 6.0])
     colour_b = color_math.oklch_to_oklab([0.60, 0.08, math.pi / 3.0])
     panel.set_selected_colour(colour_a, committed=True)
-    panel._readout_panel.set_previous_colour(colour_a)
+    panel._readout_panel.set_previous_colour(_present(colour_a))
 
     panel._readout_panel.committed.emit(np.asarray(colour_b, dtype=float).copy())
 
@@ -1050,7 +1119,7 @@ def test_indicator_survives_slider_commit_on_active_selector(qtbot):
     assert rings
 
 
-def test_off_leaf_press_keeps_indicator_visible_via_snap(qtbot):
+def test_off_leaf_press_keeps_indicator_visible_with_drag_snap(qtbot):
     controller = FakeController()
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
@@ -1060,7 +1129,7 @@ def test_off_leaf_press_keeps_indicator_visible_via_snap(qtbot):
 
     oog = ColourIntent.from_lch(0.5, color_math.SRGB_MAX_CHROMA, 0.0)
     controller._broadcast(oog, ChangeKind.PREVIEW)
-    assert len(active._interaction.indicator(active).rings) == 2
+    assert len(active._interaction.indicator(active).rings) == 1
 
     off_leaf = QtCore.QPoint(118, 60)
     _send_mouse(active, QtCore.QEvent.MouseButtonPress, off_leaf, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
@@ -1122,7 +1191,7 @@ def test_absorbed_echo_with_model_swap_preserves_intent_lch(qtbot):
         normalize_oklab_for_krita(pinned_paint),
     )
 
-    widget.show_colour(echo_intent, model_factory=lambda: new_model)
+    widget.show_colour(_present(echo_intent), model_factory=lambda: new_model)
 
     assert widget.model is new_model
     assert widget.colour is not None
@@ -1204,6 +1273,10 @@ class FakeController:
     def selected_colour(self):
         return None if self._selected_intent is None else self._selected_intent.paint_oklab
 
+    @property
+    def selected_intent(self):
+        return self._selected_intent
+
     def set_preview_colour(self, colour):
         intent = None if colour is None else self._intent_from_value(colour)
         self.previews.append(intent)
@@ -1223,14 +1296,17 @@ class FakeController:
 
     def add_colour_listener(self, listener):
         self._foreground_listeners.append(listener)
+        if self._selected_intent is not None:
+            listener(ColourSnapshot(_present(self._selected_intent), ChangeKind.INITIAL))
 
     def remove_colour_listener(self, listener):
         self._foreground_listeners.remove(listener)
 
     def _broadcast(self, colour, kind):
         self._selected_intent = self._intent_from_value(colour)
+        snapshot = ColourSnapshot(_present(self._selected_intent), kind)
         for listener in list(self._foreground_listeners):
-            listener(self._selected_intent, kind)
+            listener(snapshot)
 
     def emit_foreground(self, colour):
         self._broadcast(colour, ChangeKind.EXTERNAL)
@@ -1238,6 +1314,32 @@ class FakeController:
     def _intent_from_value(self, colour):
         fallback_hue = 0.0 if self._selected_intent is None else self._selected_intent.hue
         return ColourIntent.from_value(colour, achromatic_hue=fallback_hue)
+
+
+class SpyPresenter:
+    def __init__(self):
+        self.presented = []
+        self.snapshots = []
+
+    def present(self, colour, *, achromatic_hue=0.0):
+        intent = ColourIntent.from_value(colour, achromatic_hue=achromatic_hue)
+        snapshot = presented_colour(intent, srgb8=(101, 102, 103))
+        self.presented.append(intent)
+        self.snapshots.append(snapshot)
+        return snapshot
+
+
+class NullForegroundAdapter:
+    def set_foreground(self, oklab):
+        return None
+
+    def get_foreground(self):
+        return None
+
+
+class ImmediateTestScheduler:
+    def call_soon(self, callback):
+        callback()
 
 
 class FakeKritaApp:

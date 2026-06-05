@@ -18,6 +18,7 @@ from oklab_colour_picker.selector_models import (
     SelectorSelection,
 )
 from oklab_colour_picker.widgets import SelectorWidget
+from tests.helpers import presented_colour
 
 
 def _paint_of(c):
@@ -26,8 +27,16 @@ def _paint_of(c):
     return c.paint_oklab if isinstance(c, ColourIntent) else c
 
 
+def _widget(model):
+    return SelectorWidget(model)
+
+
+def _present(colour):
+    return presented_colour(colour)
+
+
 def test_mouse_drag_emits_previews_and_commit(qtbot):
-    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget = _widget(LightnessChromaSliceModel(hue=0.0))
     widget.resize(64, 32)
     qtbot.addWidget(widget)
     widget.show()
@@ -49,7 +58,7 @@ def test_mouse_drag_emits_previews_and_commit(qtbot):
 
 
 def test_cold_start_invalid_release_does_not_commit(qtbot):
-    widget = SelectorWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(40, 80)
     qtbot.addWidget(widget)
     widget.show()
@@ -68,14 +77,14 @@ def test_cold_start_invalid_release_does_not_commit(qtbot):
 
 
 def test_warm_off_leaf_press_snaps_and_commits(qtbot):
-    widget = SelectorWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(40, 80)
     qtbot.addWidget(widget)
     widget.show()
 
     previous = widget.model.color_at_position((20, 40), _size(widget))
     assert previous is not None
-    widget.set_selected_colour(previous)
+    widget.set_selected_colour(_present(previous))
 
     commits = []
     previews = []
@@ -96,14 +105,14 @@ def test_warm_off_leaf_press_snaps_and_commits(qtbot):
 
 
 def test_hue_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
-    widget = SelectorWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(64, 64)
     qtbot.addWidget(widget)
     widget.show()
 
     previous = widget.model.color_at_position((32, 32), _size(widget))
     assert previous is not None
-    widget.set_selected_colour(previous)
+    widget.set_selected_colour(_present(previous))
 
     commits = []
     previews = []
@@ -134,14 +143,14 @@ def test_hue_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
 
 
 def test_lightness_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
-    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget = _widget(LightnessChromaSliceModel(hue=0.0))
     widget.resize(64, 32)
     qtbot.addWidget(widget)
     widget.show()
 
     previous = widget.model.color_at_position((8, 16), _size(widget))
     assert previous is not None
-    widget.set_selected_colour(previous)
+    widget.set_selected_colour(_present(previous))
 
     commits = []
     previews = []
@@ -172,7 +181,7 @@ def test_lightness_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
 
 
 def test_achromatic_hue_lightness_drag_outside_keeps_cursor_hue_anchor(qtbot):
-    widget = SelectorWidget(HueLightnessSliceModel(chroma=0.0))
+    widget = _widget(HueLightnessSliceModel(chroma=0.0))
     widget.resize(101, 101)
     qtbot.addWidget(widget)
     widget.show()
@@ -196,7 +205,7 @@ def test_achromatic_hue_lightness_drag_outside_keeps_cursor_hue_anchor(qtbot):
 def test_hue_lightness_out_of_zone_pick_computes_snap_once(qtbot, monkeypatch):
     from oklab_colour_picker.models import hue_lightness_slice
 
-    widget = SelectorWidget(HueLightnessSliceModel(chroma=0.2))
+    widget = _widget(HueLightnessSliceModel(chroma=0.2))
     widget.resize(101, 101)
     qtbot.addWidget(widget)
     widget.show()
@@ -219,7 +228,7 @@ def test_hue_lightness_out_of_zone_pick_computes_snap_once(qtbot, monkeypatch):
 
 
 def test_snapped_colour_with_unresolvable_position_still_commits(qtbot):
-    widget = SelectorWidget(UnresolvableSnapModel())
+    widget = _widget(UnresolvableSnapModel())
     widget.resize(10, 10)
     qtbot.addWidget(widget)
     widget.show()
@@ -237,7 +246,7 @@ def test_snapped_colour_with_unresolvable_position_still_commits(qtbot):
 
 
 def test_leave_during_drag_does_not_emit_invalid_preview(qtbot):
-    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget = _widget(LightnessChromaSliceModel(hue=0.0))
     widget.resize(64, 32)
     qtbot.addWidget(widget)
     widget.show()
@@ -257,7 +266,7 @@ def test_leave_during_drag_does_not_emit_invalid_preview(qtbot):
 
 
 def test_programmatic_colour_update_blocks_widget_signals(qtbot):
-    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget = _widget(LightnessChromaSliceModel(hue=0.0))
     widget.resize(64, 32)
     qtbot.addWidget(widget)
 
@@ -269,7 +278,7 @@ def test_programmatic_colour_update_blocks_widget_signals(qtbot):
     colour = widget.model.color_at_position((20, 10), (64, 32))
     assert colour is not None
     blocker = QtCore.QSignalBlocker(widget)
-    widget.set_selected_colour(colour)
+    widget.set_selected_colour(_present(colour))
     del blocker
 
     assert previews == []
@@ -278,14 +287,14 @@ def test_programmatic_colour_update_blocks_widget_signals(qtbot):
 
 
 def test_keyboard_nudge_previews_then_commits_on_release(qtbot):
-    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget = _widget(LightnessChromaSliceModel(hue=0.0))
     widget.resize(64, 32)
     qtbot.addWidget(widget)
     widget.show()
 
     start = widget.model.color_at_position((20, 10), _size(widget))
     assert start is not None
-    widget.set_selected_colour(start)
+    widget.set_selected_colour(_present(start))
 
     previews = []
     commits = []
@@ -307,7 +316,7 @@ def test_keyboard_nudge_previews_then_commits_on_release(qtbot):
 
 
 def test_signal_payload_mutation_does_not_corrupt_widget_state(qtbot):
-    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget = _widget(LightnessChromaSliceModel(hue=0.0))
     widget.resize(64, 32)
     qtbot.addWidget(widget)
     widget.show()
@@ -326,7 +335,7 @@ def test_signal_payload_mutation_does_not_corrupt_widget_state(qtbot):
 
 
 def test_keyboard_step_at_boundary_keeps_event_handled(qtbot):
-    widget = SelectorWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(40, 80)
     qtbot.addWidget(widget)
     widget.show()
@@ -335,7 +344,7 @@ def test_keyboard_step_at_boundary_keeps_event_handled(qtbot):
     # extends out far enough that this radius is in-gamut.
     start = widget.model.color_at_position((20, 55), _size(widget))
     assert start is not None
-    widget.set_selected_colour(start)
+    widget.set_selected_colour(_present(start))
 
     event = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
     QtWidgets.QApplication.sendEvent(widget, event)
@@ -345,14 +354,14 @@ def test_keyboard_step_at_boundary_keeps_event_handled(qtbot):
 
 
 def test_mouse_interaction_cancels_pending_keyboard_commit(qtbot):
-    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget = _widget(LightnessChromaSliceModel(hue=0.0))
     widget.resize(64, 32)
     qtbot.addWidget(widget)
     widget.show()
 
     start = widget.model.color_at_position((20, 10), _size(widget))
     assert start is not None
-    widget.set_selected_colour(start)
+    widget.set_selected_colour(_present(start))
 
     commits = []
     widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
@@ -373,14 +382,14 @@ def test_mouse_interaction_cancels_pending_keyboard_commit(qtbot):
 
 
 def test_focus_loss_flushes_pending_keyboard_commit(qtbot):
-    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget = _widget(LightnessChromaSliceModel(hue=0.0))
     widget.resize(64, 32)
     qtbot.addWidget(widget)
     widget.show()
 
     start = widget.model.color_at_position((20, 10), _size(widget))
     assert start is not None
-    widget.set_selected_colour(start)
+    widget.set_selected_colour(_present(start))
 
     commits = []
     widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
@@ -397,12 +406,12 @@ def test_focus_loss_flushes_pending_keyboard_commit(qtbot):
 
 
 def test_indicator_position_comes_from_model(qtbot):
-    widget = SelectorWidget(LightnessChromaSliceModel(hue=math.pi / 3.0))
+    widget = _widget(LightnessChromaSliceModel(hue=math.pi / 3.0))
     widget.resize(100, 50)
     qtbot.addWidget(widget)
 
     colour = color_math.oklch_to_oklab([0.25, 0.02, math.pi / 3.0])
-    widget.set_selected_colour(colour)
+    widget.set_selected_colour(_present(colour))
 
     expected = widget.model.position_for_intent(color_math.oklab_to_oklch(colour), (100, 50))
     assert expected is not None
@@ -411,11 +420,11 @@ def test_indicator_position_comes_from_model(qtbot):
 
 def test_widget_keeps_intent_lch_and_paint_colour_together(qtbot):
     hue = math.radians(210.0)
-    widget = SelectorWidget(HueLightnessSliceModel(chroma=0.0))
+    widget = _widget(HueLightnessSliceModel(chroma=0.0))
     widget.resize(121, 121)
     qtbot.addWidget(widget)
 
-    widget.set_selected_colour(ColourIntent.from_lch(0.5, 0.0, hue))
+    widget.set_selected_colour(_present(ColourIntent.from_lch(0.5, 0.0, hue)))
     selected = widget.selected_colour
     assert selected is not None
     selected[:] = 0.0
@@ -432,21 +441,90 @@ def test_widget_keeps_intent_lch_and_paint_colour_together(qtbot):
 
 
 def test_indicator_position_stays_strict_for_out_of_gamut_leaf_colour(qtbot):
-    widget = SelectorWidget(LightnessSliceModel(lightness=0.5))
+    widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(101, 101)
     qtbot.addWidget(widget)
 
     colour = color_math.oklch_to_oklab([0.5, color_math.SRGB_MAX_CHROMA, 0.0])
     assert widget.model.position_for_intent(color_math.oklab_to_oklch(colour), _size(widget)) is None
-    assert widget.model.indicator_for_intent(color_math.oklab_to_oklch(colour), _size(widget)) is not None
+    assert widget.model.geometric_position_for_intent(color_math.oklab_to_oklch(colour), _size(widget)) is not None
 
-    widget.set_selected_colour(colour)
+    widget.set_selected_colour(_present(colour))
 
     assert widget.indicator_position() is None
 
 
+def test_out_of_gamut_indicator_uses_presented_fallback_selector_position(qtbot):
+    hue = math.radians(110.0)
+    lightness = 0.05
+    chroma = float(color_math.max_chroma_for_lh(lightness, hue)) * 1.2
+    model = LightnessChromaSliceModel(hue=hue)
+    widget = _widget(model)
+    widget.resize(101, 101)
+    qtbot.addWidget(widget)
+    intent = ColourIntent.from_lch(lightness, chroma, hue)
+    fallback = ColourIntent.from_lch(
+        lightness,
+        float(color_math.max_chroma_for_lh(lightness, hue)) * 0.5,
+        hue,
+    )
+
+    widget.set_selected_colour(
+        presented_colour(intent, in_gamut=False, fallback=fallback)
+    )
+    indicator = widget.model_indicator()
+
+    desired = model.geometric_position_for_intent(intent.selector_lch, _size(widget))
+    landed = model.position_for_intent(fallback.selector_lch, _size(widget))
+    assert desired is not None
+    assert landed is not None
+    assert len(indicator.rings) == 2
+    assert indicator.rings[0].solid is True
+    assert indicator.rings[0].position == pytest.approx(desired)
+    assert indicator.rings[1].solid is False
+    assert indicator.rings[1].position == pytest.approx(landed)
+    assert indicator.rings[1].position != pytest.approx(desired)
+
+
+def test_out_of_gamut_indicator_omits_fallback_off_selector_slice(qtbot):
+    widget = _widget(LightnessChromaSliceModel(hue=0.0))
+    widget.resize(101, 101)
+    qtbot.addWidget(widget)
+    intent = ColourIntent.from_lch(0.6, color_math.SRGB_MAX_CHROMA, math.pi / 2.0)
+    off_slice_fallback = ColourIntent.from_lch(0.6, 0.05, math.pi / 2.0)
+
+    widget.set_selected_colour(
+        presented_colour(intent, in_gamut=False, fallback=off_slice_fallback)
+    )
+
+    assert widget.model_indicator().rings == ()
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: _widget(LightnessSliceModel(lightness=0.5)),
+        lambda: _widget(HueLightnessSliceModel(chroma=0.03)),
+        lambda: _widget(LightnessChromaSliceModel(hue=0.0)),
+    ],
+)
+def test_tiny_widget_size_does_not_raise(factory, qtbot):
+    widget = factory()
+    widget.setMinimumSize(0, 0)
+    widget.resize(1, 1)
+    qtbot.addWidget(widget)
+
+    widget.set_selected_colour(_present(np.array([0.5, 0.0, 0.0])))
+
+    assert widget.indicator_position() is None
+    image = QtGui.QImage(QtCore.QSize(1, 1), QtGui.QImage.Format_RGBA8888)
+    painter = QtGui.QPainter(image)
+    widget.render(painter)
+    painter.end()
+
+
 def test_paint_event_renders_selector_image(qtbot):
-    widget = SelectorWidget(LightnessChromaSliceModel(hue=0.0))
+    widget = _widget(LightnessChromaSliceModel(hue=0.0))
     widget.resize(32, 24)
     qtbot.addWidget(widget)
     widget.show()
@@ -469,7 +547,7 @@ def test_paint_event_renders_selector_image(qtbot):
 
 
 def test_pick_uses_selector_domain_snap():
-    widget = SelectorWidget(UnresolvableSnapModel())
+    widget = _widget(UnresolvableSnapModel())
     widget.resize(40, 20)
 
     picked = widget.pick((8.0, 3.0))

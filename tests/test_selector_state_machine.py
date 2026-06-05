@@ -17,6 +17,7 @@ from oklab_colour_picker.controller import normalize_oklab_for_krita
 from oklab_colour_picker.selector_models import LightnessChromaSliceModel, LightnessSliceModel
 from oklab_colour_picker.widgets import SelectorWidget
 from oklab_colour_picker.colour_state import ColourIntent
+from tests.helpers import presented_colour
 
 
 SIZE = (64, 32)
@@ -28,6 +29,10 @@ def _shown(qtbot, model=None, size=SIZE):
     qtbot.addWidget(widget)
     widget.show()
     return widget
+
+
+def _present(colour):
+    return presented_colour(colour)
 
 
 def _mouse(widget, kind, point, button, buttons):
@@ -110,7 +115,7 @@ def test_inv1_failed_drag_retains_no_anchor(qtbot):
 def test_inv2_idle_indicator_is_model_derived(qtbot):
     widget = _shown(qtbot)
     colour = widget.model.color_at_position((20, 16), SIZE)
-    widget.show_colour(colour)
+    widget.show_colour(_present(colour))
 
     assert widget.state == "IDLE"
     assert widget.indicator_position() == pytest.approx(
@@ -137,7 +142,7 @@ def test_inv3_pinned_swallows_its_own_echo(qtbot):
     _press_release(widget, point)
     assert widget.state == "PINNED"
 
-    widget.show_colour(widget.selected_colour)
+    widget.show_colour(_present(widget.selected_colour))
 
     assert widget.state == "PINNED"
     log = widget.transition_log
@@ -153,7 +158,7 @@ def test_inv3_pinned_yields_to_a_different_colour(qtbot):
     assert widget.state == "PINNED"
 
     other = _distinct_valid_colour(widget.model, pinned)
-    widget.show_colour(other)
+    widget.show_colour(_present(other))
 
     assert widget.state == "IDLE"
     np.testing.assert_allclose(widget.selected_colour, other)
@@ -174,7 +179,7 @@ def test_inv4_quantized_equal_echo_is_swallowed(qtbot):
         normalize_oklab_for_krita(near), normalize_oklab_for_krita(pinned)
     )
     transitions_before = len(widget.transition_log)
-    widget.show_colour(near)
+    widget.show_colour(_present(near))
 
     assert widget.state == "PINNED"
     assert len(widget.transition_log) == transitions_before
@@ -189,11 +194,11 @@ def test_inv5_show_colour_emits_no_intent_signals(qtbot):
     widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
     widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
 
-    widget.show_colour(widget.model.color_at_position((20, 16), SIZE))
+    widget.show_colour(_present(widget.model.color_at_position((20, 16), SIZE)))
     _press_release(widget, _valid_point(widget.model))
     previews.clear()
     commits.clear()
-    widget.show_colour(widget.model.color_at_position((30, 8), SIZE))
+    widget.show_colour(_present(widget.model.color_at_position((30, 8), SIZE)))
 
     assert previews == []
     assert commits == []
@@ -242,7 +247,7 @@ def test_state_coverage_every_state_is_entered(qtbot):
     widget.resize(widget.width() + 1, widget.height() + 1)
     widget.resize(*SIZE)
     assert widget.state == "IDLE"
-    widget.show_colour(widget.model.color_at_position((point.x(), point.y()), SIZE))
+    widget.show_colour(_present(widget.model.color_at_position((point.x(), point.y()), SIZE)))
     press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
     QtWidgets.QApplication.sendEvent(widget, press)
     seen.add(widget.state)  # KEYBOARD
@@ -258,7 +263,7 @@ def test_transition_guard_false_branches_do_not_change_state(qtbot):
     _mouse(widget, QtCore.QEvent.MouseButtonPress, point, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
     assert widget.state == "DRAGGING"
     dragging_colour = widget.selected_colour
-    widget.show_colour(widget.model.color_at_position((40, 8), SIZE))
+    widget.show_colour(_present(dragging_colour))
     assert widget.state == "DRAGGING"
     np.testing.assert_allclose(widget.selected_colour, dragging_colour)
     _mouse(widget, QtCore.QEvent.MouseButtonRelease, point, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
@@ -273,4 +278,3 @@ def _paint_of(c):
     if c is None:
         return None
     return c.paint_oklab if isinstance(c, ColourIntent) else c
-

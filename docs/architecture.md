@@ -6,7 +6,7 @@ A Krita docker for picking colours in **OKLab / OKLCh** - a colour space where e
 
 For artists, this means a picker that *feels* right. Three slice views - a hue/chroma disk, a hue/lightness disk, and a lightness/chroma rectangle - sit next to an L/C/H panel with sliders, a hex box, and a swatch. Every move goes straight to Krita's foreground colour.
 
-Two things we care about above all:
+Two things to care about above all:
 
 - **Great feel for artists.** No lag while dragging. No surprise hue jump when chroma drops to zero. No flicker when switching views.
 - **Fast by design.** Heavy maths runs on NumPy. The picker caches what it can and never redraws a slice that hasn't changed.
@@ -23,7 +23,7 @@ The code is split into five layers, stacked bottom to top. Lower layers don't kn
 
 ```mermaid
 flowchart LR
-    A["<b>color_math · colour_state · models</b><br/><i>pure maths, value objects, slice contract</i>"]
+    A["<b>color_math · colour_state · colour_presentation · gamut_fallback · models</b><br/><i>pure maths, value objects, fallback presentation, slice contract</i>"]
     B["<b>renderers</b><br/><i>NumPy → RGBA buffers</i>"]
     C["<b>controller</b><br/><i>the one place that owns the colour</i>"]
     D["<b>dock + widgets</b><br/><i>Qt views: emit intent, draw pushed state</i>"]
@@ -43,12 +43,14 @@ flowchart LR
 <td width="55%" valign="top">
 
 The controller holds the colour. Views send the user's intent upward.
-The controller broadcasts the new colour back down. Nothing else writes colour anywhere.
+The controller derives the presented read model once and broadcasts that
+snapshot back down. Nothing else writes colour or resolves presentation anywhere.
 
 Three rules make this work:
 
 - **Every view gets every broadcast.** No "skip the view that started it". Each view decides locally whether to draw the new colour or ignore it.
 - **The colour carries two things.** OKLab paint (what Krita writes) and OKLCh coordinates (what the UI was driving with). The controller keeps the coordinates intact through Krita's round-trip - that's how a hue survives `chroma=0`.
+- **Presentation has one owner.** `ColourIntent` is controller state. `PresentedColour` is a derived read model. The controller publishes both as a `ColourSnapshot`; the dock only fans that snapshot out to views.
 - **`kind` is a hint, not an order.** `PREVIEW`, `COMMIT`, `ROLLBACK`, `EXTERNAL`, `INITIAL` - these tell a view *why* the colour arrived. They never decide whether a view should draw.
 
 </td>
@@ -59,7 +61,7 @@ flowchart TD
     U([user gesture]) --> V[Selector / Readout widget]
     V -- "previewed / committed" --> D[Dock panel]
     D --> C[Controller<br/><b>sole colour owner</b>]
-    C -- "colour_changed(intent, kind)" --> D
+    C -- "ColourSnapshot(PresentedColour, kind)" --> D
     D -- "show_colour to every view" --> V
     C <-- "ports" --> K[(Krita foreground)]
 ```
@@ -123,6 +125,7 @@ Choices made so the picker *feels* right under an artist's hand:
 
 - **Hold the hue at `chroma=0`.** Hue is undefined at zero chroma in maths, but artists expect "raise chroma and get my hue back". The intent object carries the hue even when the paint is neutral grey.
 - **Out-of-gamut still drags smoothly.** When the cursor leaves the in-gamut area, the model snaps to the nearest valid point. A dual-ring indicator (solid where you wanted, dashed where it landed) shows what happened - the gesture never breaks.
+- **Selected-colour fallback matches Krita.** Once a colour is selected, fallback display is resolved by `gamut_fallback` through clipped 8-bit sRGB - the same colour the swatch shows and Krita writes. Selector drag snapping is only for gesture continuity; it is not reused as the selected-colour fallback.
 
 ```mermaid
 flowchart LR

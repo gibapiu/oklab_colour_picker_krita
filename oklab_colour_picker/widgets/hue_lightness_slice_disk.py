@@ -13,7 +13,11 @@ class HueLightnessSliceDiskWidget(SelectorWidget):
 
     _LIGHTNESS_RINGS: tuple[float, ...] = (0.25, 0.50, 0.75)
 
-    def __init__(self, model: HueLightnessSliceModel, parent=None) -> None:
+    def __init__(
+        self,
+        model: HueLightnessSliceModel,
+        parent=None,
+    ) -> None:
         super().__init__(model, parent)
 
     def _paint_indicator(self, painter: QtGui.QPainter) -> None:

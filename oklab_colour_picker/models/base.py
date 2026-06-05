@@ -18,22 +18,6 @@ OKLCh = tuple[float, float, float]
 
 
 @dataclass(frozen=True)
-class IndicatorSpec:
-    """Indicator positions for a selector view.
-
-    ``desired`` is where the colour mathematically belongs on this selector.
-    ``snapped`` is set only when an out-of-gamut colour needs a second marker
-    at the nearest selectable position.
-    ``out_of_gamut`` means the dual-ring cue is active; it is not a general
-    predicate for whether the source colour is outside the model gamut.
-    """
-
-    desired: Position
-    snapped: Position | None = None
-    out_of_gamut: bool = False
-
-
-@dataclass(frozen=True)
 class SelectorSelection:
     lch: OKLCh
     position: Position
@@ -76,6 +60,13 @@ class SelectorModel(ABC):
     def position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         """Return the in-gamut selector position for ``lch`` or ``None``."""
 
+    def geometric_position_for_intent(
+        self, lch: OKLCh, size: Sequence[float]
+    ) -> Position | None:
+        """Return where ``lch`` belongs on this slice, ignoring gamut clamping."""
+
+        return self.position_for_intent(lch, size)
+
     def snapped_color_at_position(
         self, position: Sequence[float], size: Sequence[float]
     ) -> np.ndarray | None:
@@ -92,29 +83,6 @@ class SelectorModel(ABC):
         """Return a drag-continuity snap selection or ``None`` for strict models."""
 
         return None
-
-    def indicator_for_intent(
-        self, lch: OKLCh, size: Sequence[float]
-    ) -> IndicatorSpec | None:
-        """Return the complete indicator spec for ``lch`` on this model."""
-
-        position = self.position_for_intent(lch, size)
-        if position is None:
-            return None
-        return IndicatorSpec(desired=position)
-
-
-def indicator_from_positions(
-    desired: Position | None,
-    snapped: Position | None,
-) -> IndicatorSpec | None:
-    if desired is None:
-        if snapped is None:
-            return None
-        return IndicatorSpec(desired=snapped)
-    if snapped is not None and not positions_close(desired, snapped):
-        return IndicatorSpec(desired=desired, snapped=snapped, out_of_gamut=True)
-    return IndicatorSpec(desired=desired)
 
 
 def positions_close(a: Position, b: Position) -> bool:

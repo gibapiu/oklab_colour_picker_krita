@@ -11,12 +11,10 @@ import numpy.typing as npt
 
 from oklab_colour_picker import color_math
 from oklab_colour_picker.models.base import (
-    IndicatorSpec,
     OKLCh,
     Position,
     SelectorModel,
     SelectorSelection,
-    indicator_from_positions,
 )
 from oklab_colour_picker.models.geometry import (
     circle_geometry,
@@ -99,18 +97,13 @@ class LightnessSliceModel(SelectorModel):
         return oklab, valid
 
     def position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
-        lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
-        if abs(lightness - self.lightness) > LIGHTNESS_EPSILON:
+        geometric = self.geometric_position_for_intent(lch, size)
+        if geometric is None:
             return None
-
-        max_chroma = color_math.max_chroma_for_lh(self.lightness, hue)
-        if chroma > max_chroma + CHROMA_EPSILON:
+        chroma, hue = float(lch[1]), float(lch[2])
+        if chroma > color_math.max_chroma_for_lh(self.lightness, hue) + CHROMA_EPSILON:
             return None
-        if chroma > color_math.SRGB_MAX_CHROMA + CHROMA_EPSILON:
-            return None
-
-        normalized_radius = float(np.clip(chroma / color_math.SRGB_MAX_CHROMA, 0.0, 1.0))
-        return position_from_circle(normalized_radius, hue, size)
+        return geometric
 
     def snapped_selector_selection_at_position(
         self, position: Sequence[float], size: Sequence[float]
@@ -133,30 +126,13 @@ class LightnessSliceModel(SelectorModel):
         chroma = max(0.0, min(desired_chroma, max_chroma))
         return (self.lightness, float(chroma), float(hue))
 
-    def indicator_for_intent(
-        self, lch: OKLCh, size: Sequence[float]
-    ) -> IndicatorSpec | None:
-        return indicator_from_positions(
-            self._desired_position_for_intent(lch, size),
-            self._snapped_position_for_intent(lch, size),
-        )
-
-    def _desired_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
+    def geometric_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
         if abs(lightness - self.lightness) > LIGHTNESS_EPSILON:
             return None
         if chroma > color_math.SRGB_MAX_CHROMA + CHROMA_EPSILON:
             return None
         normalized_radius = float(np.clip(chroma / color_math.SRGB_MAX_CHROMA, 0.0, 1.0))
-        return position_from_circle(normalized_radius, hue, size)
-
-    def _snapped_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
-        lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
-        if abs(lightness - self.lightness) > LIGHTNESS_EPSILON:
-            return None
-        max_chroma = float(color_math.max_chroma_for_lh(self.lightness, hue))
-        clamped = max(0.0, min(float(chroma), max_chroma))
-        normalized_radius = float(np.clip(clamped / color_math.SRGB_MAX_CHROMA, 0.0, 1.0))
         return position_from_circle(normalized_radius, hue, size)
 
 
