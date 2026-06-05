@@ -213,6 +213,8 @@ def test_widgets_do_not_resolve_fallback_strategy_directly():
         imports = set(_project_import_references(tree, path))
         if "oklab_colour_picker.gamut_fallback" in imports:
             offenders.append(f"{path}: imports gamut_fallback")
+        if "present_colour" in full_path.read_text():
+            offenders.append(f"{path}: accepts presenter callback")
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module == "oklab_colour_picker.colour_presentation":
                 imported = {alias.name for alias in node.names}

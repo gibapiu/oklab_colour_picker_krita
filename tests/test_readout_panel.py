@@ -201,14 +201,26 @@ def test_readout_panel_slider_edit_updates_handle_fallback(qtbot):
     _show(panel, color_math.oklch_to_oklab([0.5, 0.05, 0.0]), ChangeKind.COMMIT)
 
     received: list[ColourIntent] = []
-    panel.committed.connect(lambda intent: received.append(intent))
-    panel._row_h.valueChanged.emit(180.0, True)
-    _show(panel, received[-1], ChangeKind.COMMIT)
+    panel.previewed.connect(
+        lambda intent: (
+            received.append(intent),
+            panel.show_colour(_present(intent), ChangeKind.PREVIEW),
+        )
+    )
+    panel._row_h.set_value(180.0)
+    panel._row_h.valueChanged.emit(180.0, False)
 
     target = color_math.oklch_to_oklab([0.5, 0.05, math.radians(180.0)])
     srgb = color_math.clip_srgb(color_math.oklab_to_srgb(target))
     expected = tuple(int(round(float(c) * 255.0)) for c in srgb)
     fallback = panel._row_h.slider._fallback_colour
+    assert received
+    assert panel.readout_state == "EDITING"
+    assert (
+        panel._swatch._colour.red(),
+        panel._swatch._colour.green(),
+        panel._swatch._colour.blue(),
+    ) == expected
     assert fallback is not None
     assert (fallback.red(), fallback.green(), fallback.blue()) == expected
 

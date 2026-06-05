@@ -633,6 +633,7 @@ class ReadoutPanel(QtWidgets.QWidget):
         self._previous: PresentedColour | None = None
         self._state = _ReadoutState.IDLE
         self._latched_colour: _LatchedColour | None = None
+        self._draft_intent: ColourIntent | None = None
 
         self._swatch = _UnifiedSwatch(self)
         self._swatch.edit_started.connect(self._begin_edit)
@@ -721,17 +722,26 @@ class ReadoutPanel(QtWidgets.QWidget):
             self._set_current_colour(colour, committed=False)
             self.set_previous_colour(colour)
             return
-        self._set_current_colour(colour, committed=kind is not ChangeKind.PREVIEW)
+        self._set_current_colour(
+            colour,
+            committed=kind is not ChangeKind.PREVIEW,
+            preview=kind is ChangeKind.PREVIEW,
+        )
 
     def _set_current_colour(
         self,
         colour: PresentedColour | None,
         *,
         committed: bool,
+        preview: bool = False,
     ) -> None:
         if colour is None:
             return
         if self._state is _ReadoutState.EDITING:
+            if preview and colour.intent == self._draft_intent:
+                l, c, h = colour.intent.selector_lch
+                self._sync_readout_presentation(colour, float(l), float(c), float(h))
+                return
             self._latched_colour = _LatchedColour(
                 colour=colour,
                 committed=committed,
@@ -853,6 +863,7 @@ class ReadoutPanel(QtWidgets.QWidget):
             self._finish_user_commit(intent)
             return
         self._begin_edit()
+        self._draft_intent = intent
         self.previewed.emit(intent)
 
     def _on_l_changed(self, value: float, committed: bool) -> None:
@@ -901,5 +912,8 @@ class ReadoutPanel(QtWidgets.QWidget):
         latched = self._latched_colour
         self._state = _ReadoutState.IDLE
         self._latched_colour = None
+        self._draft_intent = None
         if exit_kind is _EditExit.CANCEL and latched is not None:
             self._apply_colour(latched.colour, committed=latched.committed)
+        elif exit_kind is _EditExit.CANCEL and self._current is not None:
+            self._sync_widgets_to_colour(self._current)

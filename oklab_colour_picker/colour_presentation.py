@@ -17,6 +17,13 @@ from oklab_colour_picker.gamut_fallback import (
 
 @dataclass(frozen=True)
 class PresentedColour:
+    """Derived display snapshot for one controller-owned colour intent.
+
+    Views consume this when painting. They must not create it themselves; the
+    dock/presenter boundary derives it from the current intent so fallback
+    policy stays centralized.
+    """
+
     intent: ColourIntent
     fallback: FallbackResult
 
@@ -43,6 +50,8 @@ class PresentedColour:
 
 @dataclass(frozen=True)
 class ColourPresenter:
+    """Project a colour intent into the view model used by Qt widgets."""
+
     fallback_strategy: FallbackStrategy
 
     def present(
