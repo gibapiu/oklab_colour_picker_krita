@@ -10,19 +10,19 @@ pytest.importorskip("PyQt5")
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 import oklab_colour_picker
-from oklab_colour_picker import color_math
-from oklab_colour_picker.colour_presentation import PresentedColour, default_colour_presenter
-from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.controller import ChangeKind, ColourPickerController, ColourSnapshot
-from oklab_colour_picker.dock import ColourPickerDockPanel, SelectorMode
+from oklab_colour_picker.domain import color_math
+from oklab_colour_picker.domain.colour_presentation import PresentedColour, default_colour_presenter
+from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.app.controller import ChangeKind, ColourPickerController, ColourSnapshot
+from oklab_colour_picker.ui.dock import ColourPickerDockPanel, SelectorMode
 from oklab_colour_picker.plugin import (
     DOCK_FACTORY_ID,
     DOCK_TITLE,
     create_dock_widget_class,
     register_plugin,
 )
-from oklab_colour_picker.widgets import HueLightnessSliceDiskWidget
-import oklab_colour_picker.dock as dock_module
+from oklab_colour_picker.ui.selectors import HueLightnessSliceDiskWidget
+import oklab_colour_picker.ui.dock as dock_module
 import oklab_colour_picker.plugin as plugin_module
 from tests.helpers import presented_colour
 
@@ -191,7 +191,7 @@ def test_real_controller_normalized_commit_echo_keeps_emitter_pinned(qtbot):
     # fixed slice coordinate enough that the rebuilt model no longer compares
     # equal, so a pre-show_colour set_model() used to knock the emitting
     # selector out of PINNED. The emitter must absorb its own normalized echo.
-    from oklab_colour_picker.controller import ColourPickerController, normalize_oklab_for_krita
+    from oklab_colour_picker.app.controller import ColourPickerController, normalize_oklab_for_krita
 
     class NormalizingAdapter:
         def __init__(self):
@@ -273,7 +273,7 @@ def test_click_on_achromatic_hue_lightness_slice_keeps_indicator_at_click(qtbot)
 
 
 def test_real_controller_achromatic_hue_lightness_commit_keeps_emitter_pinned(qtbot):
-    from oklab_colour_picker.controller import ColourPickerController, normalize_oklab_for_krita
+    from oklab_colour_picker.app.controller import ColourPickerController, normalize_oklab_for_krita
 
     class NormalizingAdapter:
         def __init__(self):
@@ -777,7 +777,7 @@ def test_created_krita_dock_syncs_foreground_on_canvas_change(qtbot):
 
 
 def test_first_open_seeds_readout_revert_target_to_real_foreground(qtbot):
-    from oklab_colour_picker.controller import ColourPickerController
+    from oklab_colour_picker.app.controller import ColourPickerController
 
     external = np.array([0.4, -0.03, 0.07])
 
@@ -799,7 +799,7 @@ def test_first_open_seeds_readout_revert_target_to_real_foreground(qtbot):
 
 
 def test_cold_start_poll_seeds_readout_revert_target_not_placeholder(qtbot):
-    from oklab_colour_picker.controller import ColourPickerController
+    from oklab_colour_picker.app.controller import ColourPickerController
 
     external = np.array([0.4, -0.03, 0.07])
 
@@ -854,7 +854,7 @@ def test_show_event_forces_a_foreground_sync_independent_of_the_poll(qtbot):
 
 
 def test_qt_foreground_timer_runs_at_fixed_interval(qtbot):
-    from oklab_colour_picker.krita_adapter import FOREGROUND_POLL_INTERVAL_MS, QtForegroundTimer
+    from oklab_colour_picker.infrastructure.krita_adapter import FOREGROUND_POLL_INTERVAL_MS, QtForegroundTimer
 
     timer = QtForegroundTimer()
     timer.start(lambda: None)
@@ -870,13 +870,13 @@ def test_qt_foreground_timer_runs_at_fixed_interval(qtbot):
 def test_dock_shows_friendly_message_when_numpy_is_missing(qtbot, monkeypatch):
     import types
 
-    fake_dock = types.ModuleType("oklab_colour_picker.dock")
+    fake_dock = types.ModuleType("oklab_colour_picker.ui.dock")
 
     def _raise_numpy_missing(_name):
         raise ModuleNotFoundError("No module named 'numpy'", name="numpy")
 
     fake_dock.__getattr__ = _raise_numpy_missing
-    monkeypatch.setitem(sys.modules, "oklab_colour_picker.dock", fake_dock)
+    monkeypatch.setitem(sys.modules, "oklab_colour_picker.ui.dock", fake_dock)
 
     dock_class = create_dock_widget_class(FakeDockWidget)
     dock = dock_class()
@@ -892,13 +892,13 @@ def test_dock_shows_friendly_message_when_numpy_is_missing(qtbot, monkeypatch):
 def test_dock_shows_installer_when_numpy_binary_is_incompatible(qtbot, monkeypatch):
     import types
 
-    fake_dock = types.ModuleType("oklab_colour_picker.dock")
+    fake_dock = types.ModuleType("oklab_colour_picker.ui.dock")
 
     def _raise_numpy_incompatible(_name):
         raise ImportError("Importing the numpy C-extensions failed: cpython-314 is incompatible")
 
     fake_dock.__getattr__ = _raise_numpy_incompatible
-    monkeypatch.setitem(sys.modules, "oklab_colour_picker.dock", fake_dock)
+    monkeypatch.setitem(sys.modules, "oklab_colour_picker.ui.dock", fake_dock)
 
     dock_class = create_dock_widget_class(FakeDockWidget)
     dock = dock_class()
@@ -913,13 +913,13 @@ def test_dock_shows_installer_when_numpy_binary_is_incompatible(qtbot, monkeypat
 def test_install_numpy_action_requires_confirmation(qtbot, monkeypatch, tmp_path):
     import types
 
-    fake_dock = types.ModuleType("oklab_colour_picker.dock")
+    fake_dock = types.ModuleType("oklab_colour_picker.ui.dock")
 
     def _raise_numpy_missing(_name):
         raise ModuleNotFoundError("No module named 'numpy'", name="numpy")
 
     fake_dock.__getattr__ = _raise_numpy_missing
-    monkeypatch.setitem(sys.modules, "oklab_colour_picker.dock", fake_dock)
+    monkeypatch.setitem(sys.modules, "oklab_colour_picker.ui.dock", fake_dock)
     captured_messages = []
 
     def reject_install(parent, title, message, *args, **kwargs):
@@ -952,13 +952,13 @@ def test_install_numpy_action_runs_installer_when_confirmed(qtbot, monkeypatch, 
 
     from oklab_colour_picker.dependency_bootstrap import InstallResult
 
-    fake_dock = types.ModuleType("oklab_colour_picker.dock")
+    fake_dock = types.ModuleType("oklab_colour_picker.ui.dock")
 
     def _raise_numpy_missing(_name):
         raise ModuleNotFoundError("No module named 'numpy'", name="numpy")
 
     fake_dock.__getattr__ = _raise_numpy_missing
-    monkeypatch.setitem(sys.modules, "oklab_colour_picker.dock", fake_dock)
+    monkeypatch.setitem(sys.modules, "oklab_colour_picker.ui.dock", fake_dock)
     monkeypatch.setattr(QtWidgets.QMessageBox, "question", lambda *args, **kwargs: QtWidgets.QMessageBox.Yes)
     monkeypatch.setattr(QtWidgets.QMessageBox, "information", lambda *args, **kwargs: QtWidgets.QMessageBox.Ok)
     installer_calls = []
@@ -988,13 +988,13 @@ def test_install_numpy_action_runs_installer_when_confirmed(qtbot, monkeypatch, 
 def test_install_numpy_action_reports_installer_exception(qtbot, monkeypatch, tmp_path):
     import types
 
-    fake_dock = types.ModuleType("oklab_colour_picker.dock")
+    fake_dock = types.ModuleType("oklab_colour_picker.ui.dock")
 
     def _raise_numpy_missing(_name):
         raise ModuleNotFoundError("No module named 'numpy'", name="numpy")
 
     fake_dock.__getattr__ = _raise_numpy_missing
-    monkeypatch.setitem(sys.modules, "oklab_colour_picker.dock", fake_dock)
+    monkeypatch.setitem(sys.modules, "oklab_colour_picker.ui.dock", fake_dock)
     monkeypatch.setattr(QtWidgets.QMessageBox, "question", lambda *args, **kwargs: QtWidgets.QMessageBox.Yes)
     captured = []
     monkeypatch.setattr(
@@ -1026,13 +1026,13 @@ def test_dock_propagates_unexpected_import_errors(qtbot, monkeypatch):
     import sys
     import types
 
-    fake_dock = types.ModuleType("oklab_colour_picker.dock")
+    fake_dock = types.ModuleType("oklab_colour_picker.ui.dock")
 
     def _raise_unknown(_name):
         raise ModuleNotFoundError("No module named 'something_else'", name="something_else")
 
     fake_dock.__getattr__ = _raise_unknown
-    monkeypatch.setitem(sys.modules, "oklab_colour_picker.dock", fake_dock)
+    monkeypatch.setitem(sys.modules, "oklab_colour_picker.ui.dock", fake_dock)
 
     dock_class = create_dock_widget_class(FakeDockWidget)
     with pytest.raises(ModuleNotFoundError):
@@ -1045,14 +1045,14 @@ def test_package_exports_register_plugin():
 
 
 def test_indicator_survives_commit_broadcast_on_every_selector(qtbot):
-    from oklab_colour_picker.controller import ColourPickerController
+    from oklab_colour_picker.app.controller import ColourPickerController
 
     class NormalizingAdapter:
         def __init__(self):
             self.foreground = None
 
         def set_foreground(self, oklab):
-            from oklab_colour_picker.controller import normalize_oklab_for_krita
+            from oklab_colour_picker.app.controller import normalize_oklab_for_krita
             self.foreground = normalize_oklab_for_krita(oklab)
             return self.foreground.copy()
 
@@ -1085,14 +1085,14 @@ def test_indicator_survives_commit_broadcast_on_every_selector(qtbot):
 
 
 def test_indicator_survives_slider_commit_on_active_selector(qtbot):
-    from oklab_colour_picker.controller import ColourPickerController
+    from oklab_colour_picker.app.controller import ColourPickerController
 
     class NormalizingAdapter:
         def __init__(self):
             self.foreground = color_math.oklch_to_oklab([0.5, 0.05, math.radians(120.0)])
 
         def set_foreground(self, oklab):
-            from oklab_colour_picker.controller import normalize_oklab_for_krita
+            from oklab_colour_picker.app.controller import normalize_oklab_for_krita
             self.foreground = normalize_oklab_for_krita(oklab)
             return self.foreground.copy()
 
@@ -1161,9 +1161,9 @@ def test_achromatic_hue_lightness_pick_carries_click_hue_to_controller(qtbot):
 
 
 def test_absorbed_echo_with_model_swap_preserves_intent_lch(qtbot):
-    from oklab_colour_picker.controller import normalize_oklab_for_krita
-    from oklab_colour_picker.widgets.selector import SelectorWidget
-    from oklab_colour_picker.selector_models import HueLightnessSliceModel
+    from oklab_colour_picker.app.controller import normalize_oklab_for_krita
+    from oklab_colour_picker.ui.selectors.selector import SelectorWidget
+    from oklab_colour_picker.models.selector_models import HueLightnessSliceModel
 
     widget = SelectorWidget(HueLightnessSliceModel(chroma=0.05))
     widget.resize(121, 121)

@@ -1,9 +1,9 @@
 import numpy as np
 
-from oklab_colour_picker import color_math
-from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.controller import ChangeKind, ColourPickerController, normalize_oklab_for_krita
-from oklab_colour_picker.krita_adapter import KritaForegroundAdapter
+from oklab_colour_picker.domain import color_math
+from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.app.controller import ChangeKind, ColourPickerController, normalize_oklab_for_krita
+from oklab_colour_picker.infrastructure.krita_adapter import KritaForegroundAdapter
 
 
 def _observe(observed):

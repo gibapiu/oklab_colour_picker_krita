@@ -4,9 +4,9 @@ import time
 
 import pytest
 
-from oklab_colour_picker import renderers
-from oklab_colour_picker.renderers import render_rgba
-from oklab_colour_picker.selector_models import (
+from oklab_colour_picker.render import renderers
+from oklab_colour_picker.render.renderers import render_rgba
+from oklab_colour_picker.models.selector_models import (
     LightnessChromaSliceModel,
     HueLightnessSliceModel,
     LightnessSliceModel,

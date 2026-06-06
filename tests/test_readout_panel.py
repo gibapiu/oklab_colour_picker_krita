@@ -10,12 +10,13 @@ pytest.importorskip("PyQt5")
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from oklab_colour_picker.controller import ChangeKind, normalize_oklab_for_krita
-from oklab_colour_picker import color_math, renderers
-from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.widgets.readout_axis import AxisTrackPresenter, ReadoutAxisRows
-from oklab_colour_picker.widgets.readout_panel import ReadoutPanel
-from oklab_colour_picker.widgets.readout_swatch import UnifiedSwatch, hex_to_oklab
+from oklab_colour_picker.app.controller import ChangeKind, normalize_oklab_for_krita
+from oklab_colour_picker.domain import color_math
+from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.render import renderers
+from oklab_colour_picker.ui.readout.axis import AxisTrackPresenter, ReadoutAxisRows
+from oklab_colour_picker.ui.readout.panel import ReadoutPanel
+from oklab_colour_picker.ui.readout.swatch import UnifiedSwatch, hex_to_oklab
 from tests.helpers import presented_colour
 
 

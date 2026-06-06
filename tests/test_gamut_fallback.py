@@ -1,8 +1,8 @@
 import numpy as np
 
-from oklab_colour_picker import color_math
-from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.gamut_fallback import ClippedSrgbFallbackStrategy
+from oklab_colour_picker.domain import color_math
+from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.domain.gamut_fallback import ClippedSrgbFallbackStrategy
 
 
 def test_clipped_srgb_fallback_uses_quantized_krita_colour():

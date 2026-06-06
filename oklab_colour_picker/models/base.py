@@ -9,7 +9,7 @@ from typing import Sequence
 import numpy as np
 import numpy.typing as npt
 
-from oklab_colour_picker import color_math
+from oklab_colour_picker.domain import color_math
 
 
 Position = tuple[float, float]

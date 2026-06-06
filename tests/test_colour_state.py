@@ -3,8 +3,8 @@ import math
 import numpy as np
 import pytest
 
-from oklab_colour_picker import color_math
-from oklab_colour_picker.colour_state import ColourIntent, normalize_oklab_for_krita
+from oklab_colour_picker.domain import color_math
+from oklab_colour_picker.domain.colour_state import ColourIntent, normalize_oklab_for_krita
 
 
 def test_colour_intent_from_lch_derives_paint_oklab():

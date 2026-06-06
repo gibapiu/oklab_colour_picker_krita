@@ -23,11 +23,11 @@ The code is split into five layers, stacked bottom to top. Lower layers don't kn
 
 ```mermaid
 flowchart LR
-    A["<b>color_math · colour_state · colour_presentation · gamut_fallback · models</b><br/><i>pure maths, value objects, fallback presentation, slice contract</i>"]
-    B["<b>renderers</b><br/><i>NumPy → RGBA buffers</i>"]
-    C["<b>controller</b><br/><i>the one place that owns the colour</i>"]
-    D["<b>dock + widgets</b><br/><i>Qt views: emit intent, draw pushed state</i>"]
-    E["<b>krita_adapter · plugin</b><br/><i>Krita registration + I/O ports</i>"]
+    A["<b>domain · models</b><br/><i>pure maths, value objects, interaction state, slice contracts</i>"]
+    B["<b>render</b><br/><i>NumPy → RGBA buffers</i>"]
+    C["<b>app</b><br/><i>controller: the one place that owns the colour</i>"]
+    D["<b>ui</b><br/><i>Qt dock and views: emit intent, draw pushed state</i>"]
+    E["<b>infrastructure · plugin</b><br/><i>Krita registration + I/O adapters</i>"]
     A --> B --> C --> D --> E
     style A fill:#172b69, color: #ffffff
     style B fill:#172b69, color: #ffffff

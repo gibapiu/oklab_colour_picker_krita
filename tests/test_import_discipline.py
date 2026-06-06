@@ -7,61 +7,66 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 KRITA_IMPORT_ALLOWED = {
     Path("oklab_colour_picker/plugin.py"),
-    Path("oklab_colour_picker/controller.py"),
-    Path("oklab_colour_picker/krita_adapter.py"),
+    Path("oklab_colour_picker/app/controller.py"),
+    Path("oklab_colour_picker/infrastructure/krita_adapter.py"),
 }
 PURE_NO_QT_OR_KRITA = {
-    Path("oklab_colour_picker/colour_presentation.py"),
-    Path("oklab_colour_picker/colour_state.py"),
-    Path("oklab_colour_picker/color_math.py"),
-    Path("oklab_colour_picker/gamut_fallback.py"),
-    Path("oklab_colour_picker/readout_interaction.py"),
-    Path("oklab_colour_picker/renderers.py"),
-    Path("oklab_colour_picker/selector_interaction.py"),
-    Path("oklab_colour_picker/selector_models.py"),
+    Path("oklab_colour_picker/domain/__init__.py"),
+    Path("oklab_colour_picker/domain/color_math.py"),
+    Path("oklab_colour_picker/domain/colour_presentation.py"),
+    Path("oklab_colour_picker/domain/colour_state.py"),
+    Path("oklab_colour_picker/domain/gamut_fallback.py"),
+    Path("oklab_colour_picker/domain/readout_interaction.py"),
+    Path("oklab_colour_picker/domain/selector_interaction.py"),
     Path("oklab_colour_picker/models/__init__.py"),
     Path("oklab_colour_picker/models/base.py"),
     Path("oklab_colour_picker/models/geometry.py"),
     Path("oklab_colour_picker/models/hue_lightness_slice.py"),
     Path("oklab_colour_picker/models/lightness_chroma_slice.py"),
     Path("oklab_colour_picker/models/lightness_slice.py"),
+    Path("oklab_colour_picker/models/selector_models.py"),
+    Path("oklab_colour_picker/render/__init__.py"),
+    Path("oklab_colour_picker/render/renderers.py"),
 }
 SET_FOREGROUND_ALLOWED = {
-    Path("oklab_colour_picker/controller.py"),
-    Path("oklab_colour_picker/krita_adapter.py"),
+    Path("oklab_colour_picker/app/controller.py"),
+    Path("oklab_colour_picker/infrastructure/krita_adapter.py"),
 }
 LOWER_LAYER_FILES = {
-    Path("oklab_colour_picker/colour_presentation.py"),
-    Path("oklab_colour_picker/colour_state.py"),
-    Path("oklab_colour_picker/color_math.py"),
-    Path("oklab_colour_picker/gamut_fallback.py"),
-    Path("oklab_colour_picker/readout_interaction.py"),
-    Path("oklab_colour_picker/renderers.py"),
-    Path("oklab_colour_picker/selector_interaction.py"),
-    Path("oklab_colour_picker/selector_models.py"),
+    Path("oklab_colour_picker/domain/__init__.py"),
+    Path("oklab_colour_picker/domain/color_math.py"),
+    Path("oklab_colour_picker/domain/colour_presentation.py"),
+    Path("oklab_colour_picker/domain/colour_state.py"),
+    Path("oklab_colour_picker/domain/gamut_fallback.py"),
+    Path("oklab_colour_picker/domain/readout_interaction.py"),
+    Path("oklab_colour_picker/domain/selector_interaction.py"),
     Path("oklab_colour_picker/models/__init__.py"),
     Path("oklab_colour_picker/models/base.py"),
     Path("oklab_colour_picker/models/geometry.py"),
     Path("oklab_colour_picker/models/hue_lightness_slice.py"),
     Path("oklab_colour_picker/models/lightness_chroma_slice.py"),
     Path("oklab_colour_picker/models/lightness_slice.py"),
-    Path("oklab_colour_picker/controller.py"),
+    Path("oklab_colour_picker/models/selector_models.py"),
+    Path("oklab_colour_picker/render/__init__.py"),
+    Path("oklab_colour_picker/render/renderers.py"),
+    Path("oklab_colour_picker/app/controller.py"),
 }
 LOWER_LAYER_TESTS = {
-    "oklab_colour_picker.colour_presentation": Path("tests/test_colour_presentation.py"),
-    "oklab_colour_picker.colour_state": Path("tests/test_colour_state.py"),
-    "oklab_colour_picker.color_math": Path("tests/test_color_math.py"),
-    "oklab_colour_picker.gamut_fallback": Path("tests/test_gamut_fallback.py"),
+    "oklab_colour_picker.domain.colour_presentation": Path("tests/test_colour_presentation.py"),
+    "oklab_colour_picker.domain.colour_state": Path("tests/test_colour_state.py"),
+    "oklab_colour_picker.domain.color_math": Path("tests/test_color_math.py"),
+    "oklab_colour_picker.domain.gamut_fallback": Path("tests/test_gamut_fallback.py"),
     "oklab_colour_picker.models": Path("tests/test_selector_models.py"),
-    "oklab_colour_picker.readout_interaction": Path("tests/test_readout_interaction.py"),
-    "oklab_colour_picker.renderers": Path("tests/test_renderers.py"),
-    "oklab_colour_picker.selector_interaction": Path("tests/test_selector_interaction.py"),
-    "oklab_colour_picker.selector_models": Path("tests/test_selector_models.py"),
-    "oklab_colour_picker.controller": Path("tests/test_controller.py"),
+    "oklab_colour_picker.domain.readout_interaction": Path("tests/test_readout_interaction.py"),
+    "oklab_colour_picker.render.renderers": Path("tests/test_renderers.py"),
+    "oklab_colour_picker.domain.selector_interaction": Path("tests/test_selector_interaction.py"),
+    "oklab_colour_picker.models.selector_models": Path("tests/test_selector_models.py"),
+    "oklab_colour_picker.app.controller": Path("tests/test_controller.py"),
 }
 UI_LAYER_MODULE_PREFIXES = (
     "oklab_colour_picker.dock",
     "oklab_colour_picker.plugin",
+    "oklab_colour_picker.ui",
     "oklab_colour_picker.widgets",
 )
 
@@ -78,10 +83,7 @@ def test_krita_imports_are_limited_to_boundary_files():
 
 def test_widgets_do_not_import_krita():
     offenders = []
-    widgets_dir = ROOT / "oklab_colour_picker" / "widgets"
-    assert widgets_dir.exists()
-
-    for full_path in sorted(widgets_dir.rglob("*.py")):
+    for full_path in _ui_python_files():
         path = full_path.relative_to(ROOT)
         tree = ast.parse(full_path.read_text(), filename=path.as_posix())
         for module in _imported_modules(tree):
@@ -156,20 +158,28 @@ def test_lower_layer_guard_constants_match_dev_check_runner():
 
 
 def test_relative_import_references_are_resolved_before_lower_layer_guard():
-    tree = ast.parse("from .widgets import selector\nfrom . import dock\n")
+    tree = ast.parse("from ..ui.selectors import selector\nfrom ..ui import dock\n")
     import_from_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
     dev_checks = _load_dev_checks_module()
 
-    imports = set(_project_import_references(tree, Path("oklab_colour_picker/color_math.py")))
+    imports = set(
+        _project_import_references(
+            tree,
+            Path("oklab_colour_picker/domain/color_math.py"),
+        )
+    )
     runner_imports = {
         imported
         for node in import_from_nodes
-        for imported in dev_checks.project_import_references(node, Path("oklab_colour_picker/color_math.py"))
+        for imported in dev_checks.project_import_references(
+            node,
+            Path("oklab_colour_picker/domain/color_math.py"),
+        )
     }
 
-    assert "oklab_colour_picker.widgets" in imports
-    assert "oklab_colour_picker.widgets.selector" in imports
-    assert "oklab_colour_picker.dock" in imports
+    assert "oklab_colour_picker.ui.selectors" in imports
+    assert "oklab_colour_picker.ui.selectors.selector" in imports
+    assert "oklab_colour_picker.ui.dock" in imports
     assert imports == runner_imports
 
 
@@ -192,7 +202,7 @@ def test_lower_layer_coverage_modules_exist_and_target_the_claimed_layer():
 
 
 def test_selector_widget_uses_explicit_model_contract():
-    path = ROOT / "oklab_colour_picker" / "widgets" / "selector.py"
+    path = ROOT / "oklab_colour_picker" / "ui" / "selectors" / "selector.py"
     tree = ast.parse(path.read_text(), filename=path.relative_to(ROOT).as_posix())
     probes = [
         node.lineno
@@ -209,17 +219,19 @@ def test_selector_widget_uses_explicit_model_contract():
 
 def test_widgets_do_not_resolve_fallback_strategy_directly():
     offenders = []
-    widgets_dir = ROOT / "oklab_colour_picker" / "widgets"
-    for full_path in sorted(widgets_dir.rglob("*.py")):
+    for full_path in _ui_python_files():
         path = full_path.relative_to(ROOT)
         tree = ast.parse(full_path.read_text(), filename=path.as_posix())
         imports = set(_project_import_references(tree, path))
-        if "oklab_colour_picker.gamut_fallback" in imports:
+        if "oklab_colour_picker.domain.gamut_fallback" in imports:
             offenders.append(f"{path}: imports gamut_fallback")
         if "present_colour" in full_path.read_text():
             offenders.append(f"{path}: accepts presenter callback")
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "oklab_colour_picker.colour_presentation":
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module == "oklab_colour_picker.domain.colour_presentation"
+            ):
                 imported = {alias.name for alias in node.names}
                 disallowed = imported - {"PresentedColour", "require_presented_colour"}
                 if disallowed:
@@ -240,7 +252,9 @@ def test_selector_widget_keeps_no_absolute_pixel_indicator_memory():
     an anchor lives only inside an interaction state, not as persistent
     absolute-pixel memory."""
 
-    source = (ROOT / "oklab_colour_picker" / "widgets" / "selector.py").read_text()
+    source = (
+        ROOT / "oklab_colour_picker" / "ui" / "selectors" / "selector.py"
+    ).read_text()
     for forbidden in (
         "_last_interaction_position",
         "_record_interaction_position",
@@ -254,7 +268,7 @@ def test_dock_does_not_echo_colour_back_into_views_on_intent():
     """The dock forwards intent to the controller only; it must not push the
     colour straight back into the views (the echo loop)."""
 
-    path = ROOT / "oklab_colour_picker" / "dock.py"
+    path = ROOT / "oklab_colour_picker" / "ui" / "dock.py"
     tree = ast.parse(path.read_text(), filename=path.relative_to(ROOT).as_posix())
     offenders = []
     for node in ast.walk(tree):
@@ -278,13 +292,16 @@ def test_dock_does_not_derive_colour_presentation():
     """Presentation fallback is controller-owned; the dock only fans out the
     published snapshot to views."""
 
-    path = ROOT / "oklab_colour_picker" / "dock.py"
+    path = ROOT / "oklab_colour_picker" / "ui" / "dock.py"
     source = path.read_text()
     tree = ast.parse(source, filename=path.relative_to(ROOT).as_posix())
     offenders = []
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "oklab_colour_picker.colour_presentation":
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == "oklab_colour_picker.domain.colour_presentation"
+        ):
             imported = {alias.name for alias in node.names}
             disallowed = imported - {"PresentedColour"}
             if disallowed:
@@ -306,7 +323,7 @@ def test_selector_widget_does_not_dispatch_on_interaction_state_names():
     names. It dispatches commands to the interaction facade and reacts only to
     typed outcomes such as ``handled`` or ``rendered_broadcast``."""
 
-    path = ROOT / "oklab_colour_picker" / "widgets" / "selector.py"
+    path = ROOT / "oklab_colour_picker" / "ui" / "selectors" / "selector.py"
     source = path.read_text()
     tree = ast.parse(source, filename=path.relative_to(ROOT).as_posix())
 
@@ -323,7 +340,7 @@ def test_selector_widget_does_not_dispatch_on_interaction_state_names():
 
 
 def test_selector_broadcast_model_policy_uses_factory_result_not_state_probe():
-    path = ROOT / "oklab_colour_picker" / "widgets" / "selector.py"
+    path = ROOT / "oklab_colour_picker" / "ui" / "selectors" / "selector.py"
     source = path.read_text()
 
     assert "model_thunk" not in source
@@ -332,14 +349,18 @@ def test_selector_broadcast_model_policy_uses_factory_result_not_state_probe():
 
 
 def test_selector_interaction_has_no_string_state_factory():
-    source = (ROOT / "oklab_colour_picker" / "selector_interaction.py").read_text()
+    source = (
+        ROOT / "oklab_colour_picker" / "domain" / "selector_interaction.py"
+    ).read_text()
 
     assert "state_from_name" not in source
     assert "force_for_test" not in source
 
 
 def test_selector_interaction_dispatch_uses_command_objects():
-    source = (ROOT / "oklab_colour_picker" / "selector_interaction.py").read_text()
+    source = (
+        ROOT / "oklab_colour_picker" / "domain" / "selector_interaction.py"
+    ).read_text()
 
     assert "_COMMAND_HANDLERS" not in source
     assert "command.dispatch(self._state, ctx)" in source
@@ -347,7 +368,7 @@ def test_selector_interaction_dispatch_uses_command_objects():
 
 
 def test_dock_uses_explicit_colour_subscription():
-    source = (ROOT / "oklab_colour_picker" / "dock.py").read_text()
+    source = (ROOT / "oklab_colour_picker" / "ui" / "dock.py").read_text()
 
     assert "ColourSubscription" in source
     assert "self._colour_listener" not in source
@@ -357,6 +378,13 @@ def _project_python_asts():
     for full_path in sorted((ROOT / "oklab_colour_picker").rglob("*.py")):
         path = full_path.relative_to(ROOT)
         yield path, ast.parse(full_path.read_text(), filename=path.as_posix())
+
+
+def _ui_python_files():
+    for relative_dir in (Path("oklab_colour_picker/widgets"), Path("oklab_colour_picker/ui")):
+        ui_dir = ROOT / relative_dir
+        assert ui_dir.exists()
+        yield from sorted(ui_dir.rglob("*.py"))
 
 
 def _imported_modules(tree):

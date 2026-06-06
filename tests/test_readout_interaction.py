@@ -1,7 +1,7 @@
 import numpy as np
 
-from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.readout_interaction import (
+from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.domain.readout_interaction import (
     EditExit,
     ReadoutAction,
     ReadoutSession,

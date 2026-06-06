@@ -5,7 +5,7 @@ QApplication, no widgets — which is the whole point of the humble-object
 split: the interaction logic is unit-testable in isolation.
 """
 
-from oklab_colour_picker.selector_interaction import (
+from oklab_colour_picker.domain.selector_interaction import (
     Broadcast,
     Dragging,
     FocusOut,

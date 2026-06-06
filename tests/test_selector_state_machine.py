@@ -12,11 +12,11 @@ pytest.importorskip("PyQt5")
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from oklab_colour_picker import color_math
-from oklab_colour_picker.controller import normalize_oklab_for_krita
-from oklab_colour_picker.selector_models import LightnessChromaSliceModel, LightnessSliceModel
-from oklab_colour_picker.widgets import SelectorWidget
-from oklab_colour_picker.colour_state import ColourIntent
+from oklab_colour_picker.domain import color_math
+from oklab_colour_picker.app.controller import normalize_oklab_for_krita
+from oklab_colour_picker.models.selector_models import LightnessChromaSliceModel, LightnessSliceModel
+from oklab_colour_picker.ui.selectors import SelectorWidget
+from oklab_colour_picker.domain.colour_state import ColourIntent
 from tests.helpers import presented_colour
 
 

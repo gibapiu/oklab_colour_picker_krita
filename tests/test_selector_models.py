@@ -3,11 +3,11 @@ import math
 import numpy as np
 import pytest
 
-from oklab_colour_picker import color_math
+from oklab_colour_picker.domain import color_math
 from oklab_colour_picker import models as selector_model_package
 from oklab_colour_picker import selector_models as selector_model_facade
-from oklab_colour_picker.controller import normalize_oklab_for_krita
-from oklab_colour_picker.selector_models import (
+from oklab_colour_picker.app.controller import normalize_oklab_for_krita
+from oklab_colour_picker.models.selector_models import (
     LightnessChromaSliceModel,
     HueLightnessSliceModel,
     LightnessSliceModel,

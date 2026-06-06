@@ -8,12 +8,12 @@ pytest.importorskip("PyQt5")
 
 from PyQt5 import QtCore, QtGui
 
-from oklab_colour_picker import color_math
-from oklab_colour_picker.selector_models import (
+from oklab_colour_picker.domain import color_math
+from oklab_colour_picker.models.selector_models import (
     LightnessSliceModel,
 )
-from oklab_colour_picker.widgets import LightnessSliceDiskWidget
-from oklab_colour_picker.colour_state import ColourIntent
+from oklab_colour_picker.ui.selectors import LightnessSliceDiskWidget
+from oklab_colour_picker.domain.colour_state import ColourIntent
 
 
 def _widget(model):
@@ -21,7 +21,7 @@ def _widget(model):
 
 
 def _selector(model):
-    from oklab_colour_picker.widgets.selector import SelectorWidget
+    from oklab_colour_picker.ui.selectors.selector import SelectorWidget
 
     return SelectorWidget(model)
 
@@ -51,7 +51,7 @@ def test_disk_widget_renders_overlay_pixels_on_top_of_base(qtbot):
     # overlay subclass, once with the bare SelectorWidget that paints only
     # the disk image. Both share the same disk pixels, so any rendered
     # difference comes from the rings + gamut contour the subclass adds.
-    from oklab_colour_picker.widgets.selector import SelectorWidget
+    from oklab_colour_picker.ui.selectors.selector import SelectorWidget
 
     model = LightnessSliceModel(lightness=0.5)
     overlay = _widget(model)
