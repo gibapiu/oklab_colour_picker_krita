@@ -323,7 +323,7 @@ def test_achromatic_hue_slider_moves_hue_lightness_selector_indicator(qtbot):
 
     row = panel._readout_panel._row_h
     slider = row.slider
-    track = slider._track_rect()
+    track = slider.track_rect()
     target_x = track.left() + QtWidgets.QStyle.sliderPositionFromValue(
         slider.minimum(),
         slider.maximum(),
