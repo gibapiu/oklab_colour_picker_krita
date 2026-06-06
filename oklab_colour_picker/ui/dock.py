@@ -14,7 +14,7 @@ from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.domain.colour_presentation import PresentedColour
 from oklab_colour_picker.domain.colour_state import ColourIntent
 from oklab_colour_picker.app.controller import ChangeKind, ColourSnapshot
-from oklab_colour_picker.models.selector_models import (
+from oklab_colour_picker.models import (
     HueLightnessSliceModel,
     LightnessChromaSliceModel,
     LightnessSliceModel,

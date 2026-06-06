@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from oklab_colour_picker import dependency_bootstrap
+from oklab_colour_picker.infrastructure import dependency_bootstrap
 
 
 KRITA_PYTHON = "/fake/krita/bin/python.exe"

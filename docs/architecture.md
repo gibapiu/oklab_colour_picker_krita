@@ -19,7 +19,7 @@ Two things to care about above all:
 
 ### 2.1 Layers
 
-The code is split into five layers, stacked bottom to top. Lower layers don't know about higher ones. Only the pure layers (blue) hold colour maths. The controller (yellow) is the single owner of the current colour. Only the top layer touches Krita. Dedicated tests (`tests/test_import_discipline.py`) enforces this.
+The code is split into five layers, stacked bottom to top. Lower layers don't know about higher ones. Only the pure layers (blue) hold colour maths. The controller (yellow) is the single owner of the current colour. Only the top layer touches Krita. Dedicated tests (`tests/test_import_discipline.py`) enforce this.
 
 ```mermaid
 flowchart LR

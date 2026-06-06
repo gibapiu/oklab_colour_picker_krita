@@ -6,7 +6,7 @@ from hypothesis import HealthCheck, assume, given, settings, strategies as st
 
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.app.controller import normalize_oklab_for_krita
-from oklab_colour_picker.models.selector_models import (
+from oklab_colour_picker.models import (
     HueLightnessSliceModel,
     LightnessChromaSliceModel,
     LightnessSliceModel,

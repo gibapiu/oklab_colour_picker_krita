@@ -7,7 +7,7 @@ import os
 import sys
 from typing import Callable
 
-from oklab_colour_picker.dependency_bootstrap import install_numpy
+from oklab_colour_picker.infrastructure.dependency_bootstrap import install_numpy
 
 
 DOCK_FACTORY_ID = "oklab_colour_picker_dock"

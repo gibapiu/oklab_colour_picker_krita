@@ -950,7 +950,7 @@ def test_install_numpy_action_requires_confirmation(qtbot, monkeypatch, tmp_path
 def test_install_numpy_action_runs_installer_when_confirmed(qtbot, monkeypatch, tmp_path):
     import types
 
-    from oklab_colour_picker.dependency_bootstrap import InstallResult
+    from oklab_colour_picker.infrastructure.dependency_bootstrap import InstallResult
 
     fake_dock = types.ModuleType("oklab_colour_picker.ui.dock")
 
@@ -1163,7 +1163,7 @@ def test_achromatic_hue_lightness_pick_carries_click_hue_to_controller(qtbot):
 def test_absorbed_echo_with_model_swap_preserves_intent_lch(qtbot):
     from oklab_colour_picker.app.controller import normalize_oklab_for_krita
     from oklab_colour_picker.ui.selectors.selector import SelectorWidget
-    from oklab_colour_picker.models.selector_models import HueLightnessSliceModel
+    from oklab_colour_picker.models import HueLightnessSliceModel
 
     widget = SelectorWidget(HueLightnessSliceModel(chroma=0.05))
     widget.resize(121, 121)

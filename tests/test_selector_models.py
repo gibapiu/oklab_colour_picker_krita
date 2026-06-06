@@ -4,24 +4,14 @@ import numpy as np
 import pytest
 
 from oklab_colour_picker.domain import color_math
-from oklab_colour_picker import models as selector_model_package
-from oklab_colour_picker import selector_models as selector_model_facade
 from oklab_colour_picker.app.controller import normalize_oklab_for_krita
-from oklab_colour_picker.models.selector_models import (
+from oklab_colour_picker.models import (
     LightnessChromaSliceModel,
     HueLightnessSliceModel,
     LightnessSliceModel,
     SelectorModel,
     SelectorSelection,
-    disk_geometry,
 )
-
-
-def test_selector_models_facade_exports_model_package_contract():
-    assert selector_model_package.SelectorModel is SelectorModel
-    assert selector_model_package.SelectorSelection is SelectorSelection
-    assert selector_model_package.LightnessSliceModel is LightnessSliceModel
-    assert selector_model_facade.disk_geometry is disk_geometry
 
 
 def test_lightness_slice_maps_center_to_neutral_current_lightness():

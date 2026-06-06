@@ -37,7 +37,6 @@ PURE_NO_QT = {
     Path("oklab_colour_picker/models/hue_lightness_slice.py"),
     Path("oklab_colour_picker/models/lightness_chroma_slice.py"),
     Path("oklab_colour_picker/models/lightness_slice.py"),
-    Path("oklab_colour_picker/models/selector_models.py"),
     Path("oklab_colour_picker/render/__init__.py"),
     Path("oklab_colour_picker/render/renderers.py"),
 }
@@ -59,16 +58,13 @@ LOWER_LAYER_FILES = {
     Path("oklab_colour_picker/models/hue_lightness_slice.py"),
     Path("oklab_colour_picker/models/lightness_chroma_slice.py"),
     Path("oklab_colour_picker/models/lightness_slice.py"),
-    Path("oklab_colour_picker/models/selector_models.py"),
     Path("oklab_colour_picker/render/__init__.py"),
     Path("oklab_colour_picker/render/renderers.py"),
     Path("oklab_colour_picker/app/controller.py"),
 }
 UI_LAYER_MODULE_PREFIXES = (
-    "oklab_colour_picker.dock",
     "oklab_colour_picker.plugin",
     "oklab_colour_picker.ui",
-    "oklab_colour_picker.widgets",
 )
 
 

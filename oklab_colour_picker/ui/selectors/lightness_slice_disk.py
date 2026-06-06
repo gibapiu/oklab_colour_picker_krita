@@ -27,10 +27,8 @@ import numpy as np
 from PyQt5 import QtCore, QtGui
 
 from oklab_colour_picker.domain import color_math
-from oklab_colour_picker.models.selector_models import (
-    LightnessSliceModel,
-    disk_geometry,
-)
+from oklab_colour_picker.models import LightnessSliceModel
+from oklab_colour_picker.models.geometry import disk_geometry
 from oklab_colour_picker.ui.selectors.selector import SelectorWidget
 
 

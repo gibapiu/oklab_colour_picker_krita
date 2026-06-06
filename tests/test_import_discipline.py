@@ -24,7 +24,6 @@ PURE_NO_QT_OR_KRITA = {
     Path("oklab_colour_picker/models/hue_lightness_slice.py"),
     Path("oklab_colour_picker/models/lightness_chroma_slice.py"),
     Path("oklab_colour_picker/models/lightness_slice.py"),
-    Path("oklab_colour_picker/models/selector_models.py"),
     Path("oklab_colour_picker/render/__init__.py"),
     Path("oklab_colour_picker/render/renderers.py"),
 }
@@ -46,7 +45,6 @@ LOWER_LAYER_FILES = {
     Path("oklab_colour_picker/models/hue_lightness_slice.py"),
     Path("oklab_colour_picker/models/lightness_chroma_slice.py"),
     Path("oklab_colour_picker/models/lightness_slice.py"),
-    Path("oklab_colour_picker/models/selector_models.py"),
     Path("oklab_colour_picker/render/__init__.py"),
     Path("oklab_colour_picker/render/renderers.py"),
     Path("oklab_colour_picker/app/controller.py"),
@@ -60,14 +58,11 @@ LOWER_LAYER_TESTS = {
     "oklab_colour_picker.domain.readout_interaction": Path("tests/test_readout_interaction.py"),
     "oklab_colour_picker.render.renderers": Path("tests/test_renderers.py"),
     "oklab_colour_picker.domain.selector_interaction": Path("tests/test_selector_interaction.py"),
-    "oklab_colour_picker.models.selector_models": Path("tests/test_selector_models.py"),
     "oklab_colour_picker.app.controller": Path("tests/test_controller.py"),
 }
 UI_LAYER_MODULE_PREFIXES = (
-    "oklab_colour_picker.dock",
     "oklab_colour_picker.plugin",
     "oklab_colour_picker.ui",
-    "oklab_colour_picker.widgets",
 )
 
 
@@ -81,7 +76,7 @@ def test_krita_imports_are_limited_to_boundary_files():
     assert offenders == []
 
 
-def test_widgets_do_not_import_krita():
+def test_ui_layer_does_not_import_krita():
     offenders = []
     for full_path in _ui_python_files():
         path = full_path.relative_to(ROOT)
@@ -138,7 +133,7 @@ def test_selection_does_not_read_from_qimage_pixels():
     assert offenders == []
 
 
-def test_lower_layers_do_not_import_widget_dock_or_plugin_layers():
+def test_lower_layers_do_not_import_ui_or_plugin_layers():
     offenders = []
     for path, tree in _project_python_asts():
         if path not in LOWER_LAYER_FILES:
@@ -217,7 +212,7 @@ def test_selector_widget_uses_explicit_model_contract():
     assert probes == []
 
 
-def test_widgets_do_not_resolve_fallback_strategy_directly():
+def test_ui_layer_does_not_resolve_fallback_strategy_directly():
     offenders = []
     for full_path in _ui_python_files():
         path = full_path.relative_to(ROOT)
@@ -381,10 +376,9 @@ def _project_python_asts():
 
 
 def _ui_python_files():
-    for relative_dir in (Path("oklab_colour_picker/widgets"), Path("oklab_colour_picker/ui")):
-        ui_dir = ROOT / relative_dir
-        assert ui_dir.exists()
-        yield from sorted(ui_dir.rglob("*.py"))
+    ui_dir = ROOT / "oklab_colour_picker" / "ui"
+    assert ui_dir.exists()
+    yield from sorted(ui_dir.rglob("*.py"))
 
 
 def _imported_modules(tree):

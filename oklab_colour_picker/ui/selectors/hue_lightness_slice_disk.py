@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from PyQt5 import QtCore, QtGui
 
-from oklab_colour_picker.models.selector_models import HueLightnessSliceModel, disk_geometry
+from oklab_colour_picker.models import HueLightnessSliceModel
+from oklab_colour_picker.models.geometry import disk_geometry
 from oklab_colour_picker.ui.selectors.selector import SelectorWidget
 
 

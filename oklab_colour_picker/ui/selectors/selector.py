@@ -17,7 +17,7 @@ from oklab_colour_picker.domain.colour_state import ColourIntent
 from oklab_colour_picker.app.controller import normalize_oklab_for_krita
 from oklab_colour_picker.models.base import positions_close
 from oklab_colour_picker.domain.selector_interaction import Indicator, Pick, PickResult, Ring
-from oklab_colour_picker.models.selector_models import SelectorModel, SelectorSelection
+from oklab_colour_picker.models import SelectorModel, SelectorSelection
 from oklab_colour_picker.render import renderers
 
 

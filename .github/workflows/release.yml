@@ -6,7 +6,7 @@ on:
       - 'v*'          # release tag format: v1.0.0
 
 permissions:
-  contents: write     
+  contents: write
 
 jobs:
   release:

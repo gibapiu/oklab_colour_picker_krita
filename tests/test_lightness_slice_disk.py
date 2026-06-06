@@ -9,7 +9,7 @@ pytest.importorskip("PyQt5")
 from PyQt5 import QtCore, QtGui
 
 from oklab_colour_picker.domain import color_math
-from oklab_colour_picker.models.selector_models import (
+from oklab_colour_picker.models import (
     LightnessSliceModel,
 )
 from oklab_colour_picker.ui.selectors import LightnessSliceDiskWidget

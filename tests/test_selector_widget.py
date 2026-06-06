@@ -10,7 +10,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.domain.colour_state import ColourIntent
-from oklab_colour_picker.models.selector_models import (
+from oklab_colour_picker.models import (
     HueLightnessSliceModel,
     LightnessChromaSliceModel,
     LightnessSliceModel,
