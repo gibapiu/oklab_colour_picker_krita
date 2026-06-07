@@ -25,7 +25,7 @@ The code is split into five layers, stacked bottom to top. Lower layers don't kn
 flowchart LR
     A["<b>domain · models</b><br/><i>pure maths, value objects, interaction state, slice contracts</i>"]
     B["<b>render</b><br/><i>NumPy → RGBA buffers</i>"]
-    C["<b>app</b><br/><i>controller: the one place that owns the colour</i>"]
+    C["<b>app</b><br/><i>colour ownership and selector model reuse policy</i>"]
     D["<b>ui</b><br/><i>Qt dock and views: emit intent, draw pushed state</i>"]
     E["<b>infrastructure · plugin</b><br/><i>Krita registration + I/O adapters</i>"]
     A --> B --> C --> D --> E
@@ -151,7 +151,7 @@ flowchart LR
 
 Choices made to keep the picker fast under continuous drag:
 
-- **Cache the slice model.** A slice is only rebuilt when its fixed coordinate actually changes - not on every preview tick. Views that are mid-gesture are skipped entirely.
+- **Cache the slice model.** The Qt-free `SelectorModelCache` rebuilds a slice only when its fixed coordinate changes - not on every preview tick. Views that are mid-gesture are skipped entirely.
 - **NumPy on the hot path.** Pixel maths, gamut masks, and snap searches are vectorised. Slice and slider images are RGBA buffers Qt can blit directly.
 - **Debounce commits.** Quick drags coalesce into one adapter write on the next event-loop turn - hundreds of mouse-move events become one Krita write.
 
