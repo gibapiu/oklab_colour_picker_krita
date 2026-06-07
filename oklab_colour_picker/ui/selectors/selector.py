@@ -74,20 +74,6 @@ class SelectorWidget(QtWidgets.QWidget):
         self.setMinimumSize(32, 32)
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
 
-    # -- State-machine surface ----------------------------------------
-
-    @property
-    def state(self) -> str:
-        return self._interaction.state_name
-
-    @property
-    def anchor(self) -> tuple[float, float] | None:
-        return self._interaction.anchor
-
-    @property
-    def transition_log(self) -> tuple[str, ...]:
-        return self._interaction.transition_log
-
     def _dispatch(
         self, command: selector_interaction.SelectorCommand
     ) -> selector_interaction.InteractionResult:

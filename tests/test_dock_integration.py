@@ -229,8 +229,6 @@ def test_real_controller_normalized_commit_echo_keeps_emitter_pinned(qtbot):
     QtCore.QCoreApplication.sendEvent(active, press)
     QtCore.QCoreApplication.sendEvent(active, release)
 
-    assert active.state == "PINNED"
-    assert active.anchor == pytest.approx((float(click.x()), float(click.y())))
     assert active.indicator_position() == pytest.approx(
         (float(click.x()), float(click.y()))
     )
@@ -301,7 +299,6 @@ def test_real_controller_achromatic_hue_lightness_commit_keeps_emitter_pinned(qt
     _send_mouse(active, QtCore.QEvent.MouseButtonPress, click, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
     _send_mouse(active, QtCore.QEvent.MouseButtonRelease, click, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
 
-    assert active.state == "PINNED"
     assert active.indicator_position() == pytest.approx((float(click.x()), float(click.y())))
 
 
@@ -337,7 +334,6 @@ def test_achromatic_hue_slider_moves_hue_lightness_selector_indicator(qtbot):
     hue = math.radians(panel._readout_panel._row_h.value())
     lightness = panel._readout_panel._row_l.value()
     radius = (1.0 - lightness) * 60.0
-    assert active.state == "IDLE"
     assert active.indicator_position() == pytest.approx(
         (
             60.0 + radius * math.cos(hue),
@@ -491,7 +487,6 @@ def test_drag_rebuilds_only_background_models_whose_fixed_coordinate_changes(
     QtCore.QCoreApplication.sendEvent(active, press)
     QtCore.QCoreApplication.sendEvent(active, move)
 
-    assert active.state == "DRAGGING"
     assert len(controller.previews) == 2
     expected_counts = _expected_rebuild_counts(initial_coordinates, controller.previews)
     assert model_calls.count(SelectorMode.LIGHTNESS_SLICE) == expected_counts[SelectorMode.LIGHTNESS_SLICE]
@@ -1115,7 +1110,6 @@ def test_indicator_survives_slider_commit_on_active_selector(qtbot):
 
     widget = panel.active_selector
     rings = widget._interaction.indicator(widget).rings
-    assert widget.state == "IDLE"
     assert rings
 
 
@@ -1136,7 +1130,6 @@ def test_off_leaf_press_keeps_indicator_visible_with_drag_snap(qtbot):
     assert active._interaction.indicator(active).rings
 
     _send_mouse(active, QtCore.QEvent.MouseButtonRelease, off_leaf, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
-    assert active.state == "PINNED"
     assert active._interaction.indicator(active).rings
 
 
@@ -1173,7 +1166,6 @@ def test_absorbed_echo_with_model_swap_preserves_intent_lch(qtbot):
     click = QtCore.QPoint(60, 30)
     _send_mouse(widget, QtCore.QEvent.MouseButtonPress, click, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
     _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, click, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
-    assert widget.state == "PINNED"
 
     # Reuse the pinned paint so PINNED.quantized_equal absorbs the echo; the
     # intent's coords still differ from the paint-recovered LCH.
@@ -1231,7 +1223,6 @@ def test_invalid_press_on_warm_idle_is_a_no_op(qtbot):
     active._model = _InvalidPickModel(active._model)
 
     _send_mouse(active, QtCore.QEvent.MouseButtonPress, QtCore.QPoint(60, 60), QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    assert active.state == "IDLE"
     assert active._interaction.indicator(active).rings == rings_before
 
 

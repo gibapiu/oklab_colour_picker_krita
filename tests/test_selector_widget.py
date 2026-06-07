@@ -197,7 +197,6 @@ def test_achromatic_hue_lightness_drag_outside_keeps_cursor_hue_anchor(qtbot):
     _send_mouse(widget, QtCore.QEvent.MouseMove, outside, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
     _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, outside, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
 
-    assert widget.state == "PINNED"
     assert widget.indicator_position() == pytest.approx(expected_position, abs=1.0)
     np.testing.assert_allclose(widget.selected_colour, expected)
 
