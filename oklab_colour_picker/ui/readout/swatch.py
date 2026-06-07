@@ -122,10 +122,6 @@ class UnifiedSwatch(QtWidgets.QWidget):
         )
         self._revert_button.setToolTip(tip)
 
-    @property
-    def hex_text(self) -> str:
-        return self._hex_text
-
     def _sync_hex_editor(self) -> None:
         if not self._editing and self._hex_edit.text().lower() != self._hex_text:
             self._suppress_finish = True

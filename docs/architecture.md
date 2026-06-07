@@ -25,7 +25,7 @@ The code is split into five layers, stacked bottom to top. Lower layers don't kn
 flowchart LR
     A["<b>domain · models</b><br/><i>pure maths, value objects, interaction state, slice contracts</i>"]
     B["<b>render</b><br/><i>NumPy → RGBA buffers</i>"]
-    C["<b>app</b><br/><i>colour ownership and selector model reuse policy</i>"]
+    C["<b>app</b><br/><i>colour ownership, read models, and selector reuse policy</i>"]
     D["<b>ui</b><br/><i>Qt dock and views: emit intent, draw pushed state</i>"]
     E["<b>infrastructure · plugin</b><br/><i>Krita registration + I/O adapters</i>"]
     A --> B --> C --> D --> E
@@ -116,6 +116,7 @@ A few rules the rest of the code leans on:
 - Only the controller writes colour. Views never read each other.
 
 The readout panel runs the same idea with two states: `IDLE` and `EDITING`. While editing, any colour pushed from elsewhere is held aside (not applied). If you commit, your edit wins. If you cancel, the held colour comes back.
+`ReadoutPresenter` separately maps the chosen `PresentedColour`, active L/C/H values, and revert target into one immutable display state; the Qt panel only applies that state to its controls.
 
 ---
 

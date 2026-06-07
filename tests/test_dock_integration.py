@@ -69,7 +69,7 @@ def test_dock_panel_uses_current_foreground_on_construction(qtbot):
 
     for widget in panel.selector_widgets:
         np.testing.assert_allclose(widget.selected_colour, colour)
-    np.testing.assert_allclose(panel._readout_panel._current_oklab, colour)
+    _assert_readout_matches(panel, colour)
 
 
 def test_dock_panel_construction_does_not_synchronously_resync_foreground(qtbot):
@@ -394,22 +394,21 @@ def test_lazy_selector_uses_latest_colour_when_first_built(qtbot):
 
 @pytest.mark.parametrize("source", ["selector", "readout"])
 def test_commit_signal_preserves_previous_swatch(qtbot, source):
-    controller = FakeController()
-    panel = ColourPickerDockPanel(controller)
-    qtbot.addWidget(panel)
-
     colour_a = color_math.oklch_to_oklab([0.50, 0.05, math.pi / 6.0])
     colour_b = color_math.oklch_to_oklab([0.60, 0.08, math.pi / 3.0])
-    panel.set_selected_colour(colour_a, committed=True)
-    panel._readout_panel.set_previous_colour(_present(colour_a))
+    controller = FakeController(selected_colour=colour_a)
+    panel = ColourPickerDockPanel(controller)
+    qtbot.addWidget(panel)
 
     emitter = panel.active_selector if source == "selector" else panel._readout_panel
     if source == "selector":
         emitter.previewed.emit(np.asarray(colour_b, dtype=float).copy())
     emitter.committed.emit(np.asarray(colour_b, dtype=float).copy())
+    _assert_readout_matches(panel, colour_b)
 
-    np.testing.assert_allclose(panel._readout_panel._previous_oklab, colour_a, atol=1e-6)
-    np.testing.assert_allclose(panel._readout_panel._current_oklab, colour_b, atol=1e-6)
+    panel._readout_panel._swatch.revert_clicked.emit()
+
+    np.testing.assert_allclose(controller.commits[-1].paint_oklab, colour_a, atol=1e-6)
 
 
 def test_first_open_seeds_readout_revert_target_to_real_foreground(qtbot):
@@ -427,11 +426,11 @@ def test_first_open_seeds_readout_revert_target_to_real_foreground(qtbot):
     panel = ColourPickerDockPanel(ColourPickerController(_Adapter()))
     qtbot.addWidget(panel)
 
-    # The subscribe-time pull acquires the real foreground; the INITIAL
-    # replay must adopt it as both current and the revert baseline, never
-    # leave the DEFAULT_COLOUR placeholder as the previous colour.
-    np.testing.assert_allclose(panel._readout_panel._current_oklab, external, atol=1e-6)
-    np.testing.assert_allclose(panel._readout_panel._previous_oklab, external, atol=1e-6)
+    _assert_readout_matches(panel, external)
+    assert panel._readout_panel._swatch._revert_button.isEnabled()
+    assert panel._readout_panel._swatch._hex_edit.text() in (
+        panel._readout_panel._swatch._revert_button.toolTip()
+    )
 
 
 def test_cold_start_poll_seeds_readout_revert_target_not_placeholder(qtbot):
@@ -473,8 +472,11 @@ def test_cold_start_poll_seeds_readout_revert_target_not_placeholder(qtbot):
     adapter.foreground = external
     timer.tick()
 
-    np.testing.assert_allclose(panel._readout_panel._current_oklab, external, atol=1e-6)
-    np.testing.assert_allclose(panel._readout_panel._previous_oklab, external, atol=1e-6)
+    _assert_readout_matches(panel, external)
+    assert panel._readout_panel._swatch._revert_button.isEnabled()
+    assert panel._readout_panel._swatch._hex_edit.text() in (
+        panel._readout_panel._swatch._revert_button.toolTip()
+    )
 
 
 def test_show_event_forces_a_foreground_sync_independent_of_the_poll(qtbot):
@@ -539,6 +541,14 @@ def _send_mouse(widget, event_type, point, button, buttons):
     )
     QtCore.QCoreApplication.sendEvent(widget, event)
     return event
+
+
+def _assert_readout_matches(panel: ColourPickerDockPanel, colour) -> None:
+    lightness, chroma, hue = ColourIntent.from_value(colour).selector_lch
+    readout = panel._readout_panel
+    assert readout._row_l.value() == pytest.approx(lightness, abs=1e-3)
+    assert readout._row_c.value() == pytest.approx(chroma, abs=1e-3)
+    assert readout._row_h.value() == pytest.approx(math.degrees(hue), abs=0.1)
 
 
 class FakeController:

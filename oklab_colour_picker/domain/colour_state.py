@@ -107,15 +107,6 @@ class ColourIntent:
     def is_achromatic(self) -> bool:
         return color_math.is_achromatic_chroma(self.chroma)
 
-    def with_lightness(self, lightness: float) -> "ColourIntent":
-        return self.from_lch(lightness, self.chroma, self.hue)
-
-    def with_chroma(self, chroma: float) -> "ColourIntent":
-        return self.from_lch(self.lightness, chroma, self.hue)
-
-    def with_hue(self, hue: float) -> "ColourIntent":
-        return self.from_lch(self.lightness, self.chroma, hue)
-
     def with_krita_paint_oklab(self, oklab: Sequence[float]) -> "ColourIntent":
         paint = _as_oklab(oklab)
         if not np.array_equal(normalize_oklab_for_krita(paint), self.quantized_paint_oklab):

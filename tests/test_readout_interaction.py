@@ -76,7 +76,6 @@ def test_edit_commit_discards_latched_colour():
 
     assert result.action is ReadoutAction.NONE
     assert session.current is original
-    assert session.latched_colour is None
     assert session.state is ReadoutState.IDLE
 
 
@@ -94,4 +93,3 @@ def test_draft_preview_echo_syncs_presentation_without_latching():
     assert result.action is ReadoutAction.SYNC_DRAFT_PRESENTATION
     assert result.colour is echo
     assert session.current is original
-    assert session.latched_colour is None

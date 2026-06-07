@@ -7,6 +7,10 @@ import math
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
+from oklab_colour_picker.app.readout_presenter import (
+    ReadoutDisplay,
+    ReadoutPresenter,
+)
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.domain.colour_presentation import (
     PresentedColour,
@@ -23,7 +27,6 @@ from oklab_colour_picker.domain.readout_interaction import (
 )
 from oklab_colour_picker.ui.readout.axis import AxisTrackPresenter, ReadoutAxisRows
 from oklab_colour_picker.ui.readout.swatch import UnifiedSwatch, hex_to_oklab
-from oklab_colour_picker.ui.readout.style import qcolor_from_srgb8
 
 
 class ReadoutPanel(QtWidgets.QWidget):
@@ -38,6 +41,7 @@ class ReadoutPanel(QtWidgets.QWidget):
     ) -> None:
         super().__init__(parent)
         self._session = ReadoutSession()
+        self._presenter = ReadoutPresenter()
         self._track_presenter = AxisTrackPresenter()
 
         self._swatch = UnifiedSwatch(self)
@@ -63,7 +67,7 @@ class ReadoutPanel(QtWidgets.QWidget):
         initial_srgb8 = tuple(int(v) for v in color_math.oklab_to_srgb8(initial_oklab))
         self._rows.set_lch(0.5, 0.0, 0.0)
         self._swatch.set_srgb8(initial_srgb8)
-        self._refresh_tracks(0.5, 0.0, 0.0)
+        self._track_presenter.refresh(self._rows, 0.5, 0.0, 0.0)
         self._rows.set_handle_fallback(initial_srgb8)
         self._swatch.set_revert_target(None)
 
@@ -76,10 +80,6 @@ class ReadoutPanel(QtWidgets.QWidget):
             layout.addWidget(row)
 
     @property
-    def readout_state(self) -> str:
-        return self._session.state_name
-
-    @property
     def hue_intent(self) -> float:
         if self._session.state is ReadoutState.EDITING:
             return math.radians(self._row_h.value()) % math.tau
@@ -89,16 +89,6 @@ class ReadoutPanel(QtWidgets.QWidget):
         if current is None:
             return 0.0
         return current.intent.hue
-
-    @property
-    def _current_oklab(self) -> np.ndarray | None:
-        current = self._session.current
-        return None if current is None else current.paint_oklab
-
-    @property
-    def _previous_oklab(self) -> np.ndarray | None:
-        previous = self._session.previous
-        return None if previous is None else previous.paint_oklab
 
     def show_colour(
         self,
@@ -121,59 +111,43 @@ class ReadoutPanel(QtWidgets.QWidget):
                 preview=kind is ChangeKind.PREVIEW,
             )
         self._apply_session_result(result)
-        self._sync_revert_target()
-
-    def set_previous_colour(
-        self,
-        colour: PresentedColour | None,
-    ) -> None:
-        require_presented_colour(colour)
-        self._session.set_previous_colour(colour)
-        self._sync_revert_target()
 
     def _apply_session_result(self, result: ReadoutResult) -> None:
         if result.action is ReadoutAction.APPLY and result.colour is not None:
-            self._sync_widgets_to_colour(result.colour)
+            self._apply_display(
+                self._presenter.present(
+                    result.colour,
+                    previous=self._session.previous,
+                ),
+                sync_axes=True,
+            )
         elif (
             result.action is ReadoutAction.SYNC_DRAFT_PRESENTATION
             and result.colour is not None
         ):
-            l, c, h = result.colour.intent.selector_lch
-            self._sync_readout_presentation(result.colour, float(l), float(c), float(h))
+            self._apply_display(
+                self._presenter.present(
+                    result.colour,
+                    previous=self._session.previous,
+                    selector_lch=self._rows.current_lch(),
+                ),
+                sync_axes=False,
+            )
 
-    def _sync_revert_target(self) -> None:
-        previous = self._session.previous
-        self._swatch.set_revert_target(None if previous is None else self._hex_for_colour(previous))
-
-    def _hex_for_colour(self, colour: PresentedColour) -> str:
-        return qcolor_from_srgb8(colour.srgb8).name(QtGui.QColor.HexRgb)
-
-    def _sync_widgets_to_colour(self, colour: PresentedColour) -> None:
-        l, c, h = colour.intent.selector_lch
-        self._rows.set_lch(float(l), float(c), float(h))
-        self._sync_readout_presentation(colour, float(l), float(c), float(h))
-
-    def _sync_readout_presentation(
-        self,
-        colour: PresentedColour,
-        lightness: float,
-        chroma: float,
-        hue: float,
-    ) -> None:
-        self._swatch.set_srgb8(colour.srgb8)
-        self._swatch.set_oog_visible(not colour.in_gamut)
-        self._refresh_tracks(lightness, chroma, hue)
-        self._rows.set_handle_fallback(colour.srgb8)
-
-    def _refresh_tracks(self, lightness: float, chroma: float, hue: float) -> None:
+    def _apply_display(self, display: ReadoutDisplay, *, sync_axes: bool) -> None:
+        lightness, chroma, hue = display.selector_lch
+        if sync_axes:
+            self._rows.set_lch(lightness, chroma, hue)
+        self._swatch.set_srgb8(display.srgb8)
+        self._swatch.set_oog_visible(display.out_of_gamut)
         self._track_presenter.refresh(self._rows, lightness, chroma, hue)
+        self._rows.set_handle_fallback(display.srgb8)
+        self._swatch.set_revert_target(display.revert_hex)
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # type: ignore[override]
         super().resizeEvent(event)
-        current = self._session.current
-        if current is not None:
-            l, c, h = current.selector_lch
-            self._refresh_tracks(l, c, h)
+        lightness, chroma, hue = self._rows.current_lch()
+        self._track_presenter.refresh(self._rows, lightness, chroma, hue)
 
     def _current_lch(self) -> tuple[float, float, float]:
         if self._session.current is None:
@@ -235,4 +209,3 @@ class ReadoutPanel(QtWidgets.QWidget):
     def _finish_edit(self, exit_kind: EditExit) -> None:
         result = self._session.finish_edit(exit_kind)
         self._apply_session_result(result)
-        self._sync_revert_target()
