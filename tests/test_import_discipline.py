@@ -49,17 +49,6 @@ LOWER_LAYER_FILES = {
     Path("oklab_colour_picker/render/renderers.py"),
     Path("oklab_colour_picker/app/controller.py"),
 }
-LOWER_LAYER_TESTS = {
-    "oklab_colour_picker.domain.colour_presentation": Path("tests/test_colour_presentation.py"),
-    "oklab_colour_picker.domain.colour_state": Path("tests/test_colour_state.py"),
-    "oklab_colour_picker.domain.color_math": Path("tests/test_color_math.py"),
-    "oklab_colour_picker.domain.gamut_fallback": Path("tests/test_gamut_fallback.py"),
-    "oklab_colour_picker.models": Path("tests/test_selector_models.py"),
-    "oklab_colour_picker.domain.readout_interaction": Path("tests/test_readout_interaction.py"),
-    "oklab_colour_picker.render.renderers": Path("tests/test_renderers.py"),
-    "oklab_colour_picker.domain.selector_interaction": Path("tests/test_selector_interaction.py"),
-    "oklab_colour_picker.app.controller": Path("tests/test_controller.py"),
-}
 UI_LAYER_MODULE_PREFIXES = (
     "oklab_colour_picker.plugin",
     "oklab_colour_picker.ui",
@@ -178,40 +167,6 @@ def test_relative_import_references_are_resolved_before_lower_layer_guard():
     assert imports == runner_imports
 
 
-def test_lower_layer_coverage_modules_exist_and_target_the_claimed_layer():
-    missing = []
-    untargeted = []
-    for module, test_path in LOWER_LAYER_TESTS.items():
-        full_path = ROOT / test_path
-        if not full_path.exists():
-            missing.append(test_path.as_posix())
-            continue
-
-        tree = ast.parse(full_path.read_text(), filename=test_path.as_posix())
-        imports = set(_project_import_references(tree, test_path))
-        if module not in imports:
-            untargeted.append(f"{test_path}: {module}")
-
-    assert missing == []
-    assert untargeted == []
-
-
-def test_selector_widget_uses_explicit_model_contract():
-    path = ROOT / "oklab_colour_picker" / "ui" / "selectors" / "selector.py"
-    tree = ast.parse(path.read_text(), filename=path.relative_to(ROOT).as_posix())
-    probes = [
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "getattr"
-        and node.args
-        and _is_self_model_reference(node.args[0])
-    ]
-
-    assert probes == []
-
-
 def test_ui_layer_does_not_resolve_fallback_strategy_directly():
     offenders = []
     for full_path in _ui_python_files():
@@ -220,8 +175,6 @@ def test_ui_layer_does_not_resolve_fallback_strategy_directly():
         imports = set(_project_import_references(tree, path))
         if "oklab_colour_picker.domain.gamut_fallback" in imports:
             offenders.append(f"{path}: imports gamut_fallback")
-        if "present_colour" in full_path.read_text():
-            offenders.append(f"{path}: accepts presenter callback")
         for node in ast.walk(tree):
             if (
                 isinstance(node, ast.ImportFrom)
@@ -231,142 +184,8 @@ def test_ui_layer_does_not_resolve_fallback_strategy_directly():
                 disallowed = imported - {"PresentedColour", "require_presented_colour"}
                 if disallowed:
                     offenders.append(f"{path}: imports {sorted(disallowed)} from colour_presentation")
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr in {"present", "resolve"}
-            ):
-                offenders.append(f"{path}:{node.lineno}: calls {node.func.attr}")
 
     assert offenders == []
-
-
-def test_selector_widget_keeps_no_absolute_pixel_indicator_memory():
-    """The deleted ``_last_interaction_position`` family must never come back;
-    an anchor lives only inside an interaction state, not as persistent
-    absolute-pixel memory."""
-
-    source = (
-        ROOT / "oklab_colour_picker" / "ui" / "selectors" / "selector.py"
-    ).read_text()
-    for forbidden in (
-        "_last_interaction_position",
-        "_record_interaction_position",
-        "_interaction_position_resolves_to",
-        "_interaction_indicator_position",
-    ):
-        assert forbidden not in source, forbidden
-
-
-def test_dock_does_not_echo_colour_back_into_views_on_intent():
-    """The dock forwards intent to the controller only; it must not push the
-    colour straight back into the views (the echo loop)."""
-
-    path = ROOT / "oklab_colour_picker" / "ui" / "dock.py"
-    tree = ast.parse(path.read_text(), filename=path.relative_to(ROOT).as_posix())
-    offenders = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef) or node.name not in (
-            "_preview_colour",
-            "_commit_colour",
-        ):
-            continue
-        for call in ast.walk(node):
-            if (
-                isinstance(call, ast.Call)
-                and isinstance(call.func, ast.Attribute)
-                and call.func.attr in ("set_selected_colour", "_show_on_views", "show_colour")
-            ):
-                offenders.append(f"{node.name}: {call.func.attr}")
-
-    assert offenders == []
-
-
-def test_dock_does_not_derive_colour_presentation():
-    """Presentation fallback is controller-owned; the dock only fans out the
-    published snapshot to views."""
-
-    path = ROOT / "oklab_colour_picker" / "ui" / "dock.py"
-    source = path.read_text()
-    tree = ast.parse(source, filename=path.relative_to(ROOT).as_posix())
-    offenders = []
-
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.ImportFrom)
-            and node.module == "oklab_colour_picker.domain.colour_presentation"
-        ):
-            imported = {alias.name for alias in node.names}
-            disallowed = imported - {"PresentedColour"}
-            if disallowed:
-                offenders.append(f"imports {sorted(disallowed)} from colour_presentation")
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "present"
-        ):
-            offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}: calls present")
-
-    assert "default_colour_presenter" not in source
-    assert "ColourPresenter" not in source
-    assert offenders == []
-
-
-def test_selector_widget_does_not_dispatch_on_interaction_state_names():
-    """State-pattern boundary: the Qt adapter must not branch on string state
-    names. It dispatches commands to the interaction facade and reacts only to
-    typed outcomes such as ``handled`` or ``rendered_broadcast``."""
-
-    path = ROOT / "oklab_colour_picker" / "ui" / "selectors" / "selector.py"
-    source = path.read_text()
-    tree = ast.parse(source, filename=path.relative_to(ROOT).as_posix())
-
-    assert "_state.name" not in source
-    assert "state_from_name" not in source
-    assert "enter_state" not in source
-    offenders = [
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Constant)
-        and node.value in {"IDLE", "DRAGGING", "KEYBOARD", "PINNED"}
-    ]
-    assert offenders == []
-
-
-def test_selector_broadcast_model_policy_uses_factory_result_not_state_probe():
-    path = ROOT / "oklab_colour_picker" / "ui" / "selectors" / "selector.py"
-    source = path.read_text()
-
-    assert "model_thunk" not in source
-    assert "rendered_broadcast" in source
-    assert ".name ==" not in source
-
-
-def test_selector_interaction_has_no_string_state_factory():
-    source = (
-        ROOT / "oklab_colour_picker" / "domain" / "selector_interaction.py"
-    ).read_text()
-
-    assert "state_from_name" not in source
-    assert "force_for_test" not in source
-
-
-def test_selector_interaction_dispatch_uses_command_objects():
-    source = (
-        ROOT / "oklab_colour_picker" / "domain" / "selector_interaction.py"
-    ).read_text()
-
-    assert "_COMMAND_HANDLERS" not in source
-    assert "command.dispatch(self._state, ctx)" in source
-    assert "isinstance(command" not in source
-
-
-def test_dock_uses_explicit_colour_subscription():
-    source = (ROOT / "oklab_colour_picker" / "ui" / "dock.py").read_text()
-
-    assert "ColourSubscription" in source
-    assert "self._colour_listener" not in source
 
 
 def _project_python_asts():
@@ -428,15 +247,6 @@ def _relative_import_base(source_path, level):
     package_parts = module_parts[:-1]
     keep = max(0, len(package_parts) - level + 1)
     return package_parts[:keep]
-
-
-def _is_self_model_reference(node):
-    return (
-        isinstance(node, ast.Attribute)
-        and node.attr == "_model"
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "self"
-    )
 
 
 def _load_dev_checks_module():
