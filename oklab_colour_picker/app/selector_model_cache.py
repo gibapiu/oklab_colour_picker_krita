@@ -8,6 +8,10 @@ from enum import Enum
 from typing import Callable, Protocol
 
 from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.domain.gamut_fallback import (
+    FallbackStrategy,
+    SliceProjectionFallbackStrategy,
+)
 from oklab_colour_picker.models import (
     HueLightnessSliceModel,
     LightnessChromaSliceModel,
@@ -108,6 +112,13 @@ class SelectorModelCache:
         model = policy.model_factory(intent)
         self._entries[mode] = _CacheEntry(coordinate, model)
         return model
+
+    def fallback_strategy_for(
+        self, mode: SelectorMode, intent: ColourIntent
+    ) -> FallbackStrategy:
+        """Return ``mode``'s fallback strategy, projecting onto the same model as ``model_for``."""
+
+        return SliceProjectionFallbackStrategy(self.model_for(mode, intent))
 
 
 def _lightness_model(intent: ColourIntent) -> SelectorModel:

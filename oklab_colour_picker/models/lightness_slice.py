@@ -126,6 +126,13 @@ class LightnessSliceModel(SelectorModel):
         chroma = max(0.0, min(desired_chroma, max_chroma))
         return (self.lightness, float(chroma), float(hue))
 
+    def project_onto_slice(self, lch: OKLCh) -> OKLCh | None:
+        lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
+        if abs(lightness - self.lightness) > LIGHTNESS_EPSILON:
+            return None
+        max_chroma = float(color_math.max_chroma_for_lh(self.lightness, hue))
+        return (self.lightness, min(max(0.0, chroma), max_chroma), float(hue))
+
     def geometric_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
         if abs(lightness - self.lightness) > LIGHTNESS_EPSILON:

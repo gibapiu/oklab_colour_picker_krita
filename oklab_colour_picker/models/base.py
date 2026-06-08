@@ -67,6 +67,15 @@ class SelectorModel(ABC):
 
         return self.position_for_intent(lch, size)
 
+    def project_onto_slice(self, lch: OKLCh) -> OKLCh | None:
+        """Project an out-of-gamut ``lch`` onto this slice's in-gamut leaf.
+
+        The projection keeps the slice's fixed coordinate and clamps the free axes to the slice's gamut leaf,
+        so the result stays on this plane and inside sRGB.
+        """
+
+        return None
+
     def snapped_color_at_position(
         self, position: Sequence[float], size: Sequence[float]
     ) -> np.ndarray | None:

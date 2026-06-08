@@ -505,3 +505,98 @@ def test_lightness_chroma_slice_geometric_position_rejects_mismatched_hue():
     model = LightnessChromaSliceModel(hue=0.0)
     off_slice = color_math.oklab_to_oklch(color_math.oklch_to_oklab([0.5, 0.05, math.pi / 2.0]))
     assert model.geometric_position_for_intent(off_slice, (101.0, 101.0)) is None
+
+
+# -- project_onto_slice: the always-on-plane fallback landing --------------
+
+_HUE = math.radians(95.0)
+_PROJECTION_SLICES = (
+    (
+        "lightness-slice",
+        LightnessSliceModel(lightness=0.5),
+        (0.5, 0.18, _HUE),       # out of gamut: chroma past the leaf at this L/hue
+        (0.5, 0.05, _HUE),       # in gamut
+    ),
+    (
+        "hue-lightness-slice",
+        HueLightnessSliceModel(chroma=0.12),
+        (0.5, 0.12, _HUE),       # out of gamut: fixed chroma unreachable at this L
+        (0.9, 0.12, _HUE),       # in gamut at a higher lightness
+    ),
+    (
+        "lightness-chroma-slice",
+        LightnessChromaSliceModel(hue=_HUE),
+        (0.5, 0.18, _HUE),       # out of gamut: chroma past the per-hue leaf
+        (0.5, 0.05, _HUE),       # in gamut
+    ),
+)
+
+
+@pytest.mark.parametrize("name, model, oog_lch, _in_gamut_lch", _PROJECTION_SLICES)
+def test_project_onto_slice_lands_out_of_gamut_colour_on_the_in_gamut_leaf(name, model, oog_lch, _in_gamut_lch):
+    # Precondition: the colour is genuinely out of this slice's gamut leaf.
+    assert model.position_for_intent(oog_lch, (101.0, 101.0)) is None
+
+    resolved = model.project_onto_slice(oog_lch)
+
+    assert resolved is not None
+    # Invariant: the projection is on this slice and inside the gamut leaf, so
+    # position_for_intent (which enforces both) always resolves it.
+    assert model.position_for_intent(resolved, (101.0, 101.0)) is not None
+
+
+@pytest.mark.parametrize("name, model, _oog_lch, in_gamut_lch", _PROJECTION_SLICES)
+def test_project_onto_slice_is_identity_for_in_gamut_colour(name, model, _oog_lch, in_gamut_lch):
+    assert model.position_for_intent(in_gamut_lch, (101.0, 101.0)) is not None
+
+    resolved = model.project_onto_slice(in_gamut_lch)
+
+    assert resolved == pytest.approx(in_gamut_lch)
+
+
+def test_hue_lightness_projection_magnets_an_unreachable_hue_onto_the_disk():
+    # 213.8deg is the lowest-cusp hue; a fixed chroma of 0.20 cannot be reached
+    # there at any lightness, so the projection magnets to a neighbouring hue
+    # rather than falling off the disk.
+    chroma = 0.20
+    hue = math.radians(213.8)
+    model = HueLightnessSliceModel(chroma=chroma)
+
+    resolved = model.project_onto_slice((0.5, chroma, hue))
+
+    assert resolved is not None
+    assert resolved[1] == pytest.approx(chroma)        # stayed on this disk
+    assert resolved[2] != pytest.approx(hue)           # hue was magnetted
+    assert model.position_for_intent(resolved, (101.0, 101.0)) is not None
+
+
+@pytest.mark.parametrize("hue_deg", range(0, 360, 15))
+def test_hue_lightness_projection_is_total_across_every_hue(hue_deg):
+    # A fixed chroma above the lowest hue cusp leaves some hues unreachable;
+    # the projection must still land every hue on the disk - never None - so the
+    # selected-colour fallback never blinks off-plane to the global clip.
+    chroma = 0.22
+    model = HueLightnessSliceModel(chroma=chroma)
+
+    resolved = model.project_onto_slice((0.5, chroma, math.radians(hue_deg)))
+
+    assert resolved is not None
+    assert resolved[1] == pytest.approx(chroma)
+    assert model.position_for_intent(resolved, (101.0, 101.0)) is not None
+
+
+def test_project_onto_slice_default_is_none_for_planeless_models():
+    class LinearSelectorModel(SelectorModel):
+        def color_at_position(self, position, size):
+            return np.array([0.5, 0.0, 0.0])
+
+        def selection_at_position(self, position, size):
+            return SelectorSelection((0.5, 0.0, 0.0), (float(position[0]), float(position[1])))
+
+        def colors_at_positions(self, x, y, size):
+            return np.zeros(np.asarray(x).shape + (3,), dtype=float), np.ones(np.asarray(x).shape, dtype=bool)
+
+        def position_for_intent(self, lch, size):
+            return 2.0, 3.0
+
+    assert LinearSelectorModel().project_onto_slice((0.5, 0.0, 0.0)) is None

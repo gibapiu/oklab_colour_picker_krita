@@ -17,11 +17,10 @@ from oklab_colour_picker.domain.gamut_fallback import (
 
 @dataclass(frozen=True)
 class PresentedColour:
-    """Derived display snapshot for one controller-owned colour intent.
+    """Derived display read model built by ``ColourPresenter`` and read by views.
 
-    Views consume this when painting. They must not create it themselves; the
-    controller derives it from the current intent so fallback policy stays
-    centralized.
+    Construction is confined to the presenter by an import-discipline test,
+    so fallback policy has a single owner; everywhere else receives and reads it.
     """
 
     intent: ColourIntent
@@ -53,6 +52,11 @@ class ColourPresenter:
     """Project a colour intent into the view model used by Qt widgets."""
 
     fallback_strategy: FallbackStrategy
+
+    def with_fallback_strategy(self, strategy: FallbackStrategy) -> "ColourPresenter":
+        """Return a presenter that resolves fallback through ``strategy``."""
+
+        return ColourPresenter(strategy)
 
     def present(
         self,

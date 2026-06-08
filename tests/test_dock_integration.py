@@ -10,7 +10,10 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker.app.selector_model_cache import SelectorMode
 from oklab_colour_picker.domain import color_math
-from oklab_colour_picker.domain.colour_presentation import PresentedColour, default_colour_presenter
+from oklab_colour_picker.domain.colour_presentation import (
+    PresentedColour,
+    default_colour_presenter,
+)
 from oklab_colour_picker.domain.colour_state import ColourIntent
 from oklab_colour_picker.app.controller import (
     ChangeKind,
@@ -141,6 +144,28 @@ def test_controller_presents_once_and_dock_fans_same_snapshot_to_views(qtbot, mo
         id(presenter.snapshots[0])
     }
     assert {kind for _name, _colour, kind in view_calls} == {ChangeKind.PREVIEW}
+
+
+def test_active_slice_coordinate_change_refreshes_the_fallback_plane(qtbot):
+    # Changing the active slice's fixed coordinate (here lightness, on the
+    # fixed-lightness disk) and going out of gamut in the same step must project
+    # onto the new plane - not a slice cached from the previous colour.
+    controller = ColourPickerController(
+        NullForegroundAdapter(),
+        scheduler=ImmediateTestScheduler(),
+    )
+    panel = ColourPickerDockPanel(controller)
+    qtbot.addWidget(panel)
+    panel.set_mode(SelectorMode.LIGHTNESS_SLICE)
+    seen = []
+    controller.add_colour_listener(lambda snapshot: seen.append(snapshot.colour))
+    hue = math.radians(95.0)
+
+    controller.set_preview_colour(ColourIntent.from_lch(0.5, 0.05, hue))    # in gamut at L=0.5
+    controller.set_preview_colour(ColourIntent.from_lch(0.95, 0.18, hue))   # new L, out of gamut
+
+    assert not seen[-1].in_gamut
+    assert seen[-1].resolved_lch[0] == pytest.approx(0.95, abs=1e-6)
 
 
 def test_selector_widget_signals_emit_intent_not_presentation(qtbot):
@@ -558,6 +583,8 @@ class FakeController:
         self._foreground_listeners = []
         self._selected_intent = None if selected_colour is None else ColourIntent.from_value(selected_colour)
         self.sync_count = 0
+        self._presenter = default_colour_presenter()
+        self._fallback_strategy_provider = None
 
     @property
     def selected_colour(self):
@@ -587,14 +614,28 @@ class FakeController:
     def add_colour_listener(self, listener):
         self._foreground_listeners.append(listener)
         if self._selected_intent is not None:
-            listener(ColourSnapshot(_present(self._selected_intent), ChangeKind.INITIAL))
+            listener(ColourSnapshot(self._present(self._selected_intent), ChangeKind.INITIAL))
 
     def remove_colour_listener(self, listener):
         self._foreground_listeners.remove(listener)
 
+    def set_fallback_strategy_provider(self, provider):
+        self._fallback_strategy_provider = provider
+
+    def reproject(self):
+        if self._selected_intent is not None:
+            self._broadcast(self._selected_intent, ChangeKind.PREVIEW)
+
+    def _present(self, intent):
+        if self._fallback_strategy_provider is None:
+            return self._presenter.present(intent)
+        return self._presenter.with_fallback_strategy(
+            self._fallback_strategy_provider(intent)
+        ).present(intent)
+
     def _broadcast(self, colour, kind):
         self._selected_intent = self._intent_from_value(colour)
-        snapshot = ColourSnapshot(_present(self._selected_intent), kind)
+        snapshot = ColourSnapshot(self._present(self._selected_intent), kind)
         for listener in list(self._foreground_listeners):
             listener(snapshot)
 
@@ -610,6 +651,9 @@ class SpyPresenter:
     def __init__(self):
         self.presented = []
         self.snapshots = []
+
+    def with_fallback_strategy(self, _strategy):
+        return self
 
     def present(self, colour, *, achromatic_hue=0.0):
         intent = ColourIntent.from_value(colour, achromatic_hue=achromatic_hue)

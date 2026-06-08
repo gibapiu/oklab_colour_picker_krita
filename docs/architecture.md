@@ -126,21 +126,17 @@ Choices made so the picker *feels* right under an artist's hand:
 
 - **Hold the hue at `chroma=0`.** Hue is undefined at zero chroma in maths, but artists expect "raise chroma and get my hue back". The intent object carries the hue even when the paint is neutral grey.
 - **Out-of-gamut still drags smoothly.** When the cursor leaves the in-gamut area, the model snaps to the nearest valid point. A dual-ring indicator (solid where you wanted, dashed where it landed) shows what happened - the gesture never breaks.
-- **Selected-colour fallback matches Krita.** Once a colour is selected, fallback display is resolved by `gamut_fallback` through clipped 8-bit sRGB - the same colour the swatch shows and Krita writes. Selector drag snapping is only for gesture continuity; it is not reused as the selected-colour fallback.
+- **Out-of-gamut fallback stays on the slice.** A colour that can't be painted projects onto the active tab's plane - clamped to that slice's gamut leaf, the same leaf a drag snaps to. One projected colour does every job: the swatch shows it, Krita paints it, and the dashed ring lands on it. The projection never leaves the plane, so the ring is always visible. The fallback is per-slice, chosen by the active tab and built lazily beside its model - so the same pick resolves onto whichever plane you're working on, which is exactly what an artist expects.
 
 ```mermaid
 flowchart LR
-    subgraph IN["In-gamut"]
-      direction LR
-      A((●)):::solid
-    end
-    subgraph OUT["Out-of-gamut"]
-      direction LR
-      B((●)):::solid -. "snapped to" .-> C((○)):::dashed
-    end
-    IN ~~~ OUT
-    classDef solid fill:#444,color:#fff,stroke:#000
-    classDef dashed fill:#fff,color:#000,stroke:#444,stroke-dasharray:3 3
+    D([desired colour<br/>out of gamut]) --> P["active slice<br/>project onto plane"]
+    P --> R(["one resolved colour<br/>on the slice leaf"])
+    R --> S[swatch]
+    R --> K[(Krita paint)]
+    R --> I["dashed ring<br/>solid = wanted · dashed = landed"]
+    style D fill:#99460e, color:#000000
+    style R fill:#e8a93f, color:#000000
 ```
 
 - **No flicker between views.** Self-feedback checks, `PINNED` echo checks, and adapter writes all compare colours in 8-bit sRGB - Krita's own precision, never raw float `==`. This kills a whole class of flicker bugs.

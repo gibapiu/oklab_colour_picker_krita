@@ -260,6 +260,12 @@ class FakeController:
     def remove_colour_listener(self, listener):
         self.listeners.remove(listener)
 
+    def set_fallback_strategy_provider(self, _provider):
+        pass
+
+    def reproject(self):
+        pass
+
     def sync_external_foreground(self, *, force=False):
         self.sync_count += 1
         self.last_force_sync = force

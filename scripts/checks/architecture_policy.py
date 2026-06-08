@@ -47,6 +47,12 @@ SET_FOREGROUND_ALLOWED = {
     Path("oklab_colour_picker/infrastructure/krita_adapter.py"),
 }
 
+# PresentedColour is a derived read model; only the presenter may build it so
+# fallback policy keeps a single owner. Everyone else receives and reads it.
+PRESENTED_COLOUR_CONSTRUCTION_ALLOWED = {
+    Path("oklab_colour_picker/domain/colour_presentation.py"),
+}
+
 UI_LAYER_MODULE_PREFIXES = (
     "oklab_colour_picker.plugin",
     "oklab_colour_picker.ui",

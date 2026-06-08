@@ -131,3 +131,26 @@ def test_reused_achromatic_model_preserves_explicit_hue_intent():
 
     assert second is first
     assert first.hue == pytest.approx(hue)
+
+
+@pytest.mark.parametrize("mode", list(SelectorMode))
+def test_fallback_strategy_projects_onto_the_same_cached_slice(mode):
+    cache = SelectorModelCache()
+    intent = ColourIntent.from_lch(0.5, 0.08, 1.0)
+
+    strategy = cache.fallback_strategy_for(mode, intent)
+
+    # The strategy's plane is the very model the selector draws on, so the
+    # dashed ring and the swatch can never project onto different slices.
+    assert strategy.projection is cache.model_for(mode, intent)
+
+
+def test_fallback_strategy_follows_the_slice_when_its_fixed_coordinate_changes():
+    cache = SelectorModelCache()
+    mode = SelectorMode.LIGHTNESS_CHROMA_SLICE
+
+    first = cache.fallback_strategy_for(mode, ColourIntent.from_lch(0.5, 0.08, 1.0))
+    second = cache.fallback_strategy_for(mode, ColourIntent.from_lch(0.5, 0.08, 2.5))
+
+    assert first.projection is not second.projection
+    assert second.projection is cache.model_for(mode, ColourIntent.from_lch(0.5, 0.08, 2.5))

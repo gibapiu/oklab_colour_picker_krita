@@ -61,6 +61,12 @@ class DockController(Protocol):
     def sync_external_foreground(self, *, force: bool = False) -> bool:
         ...
 
+    def set_fallback_strategy_provider(self, provider: object) -> None:
+        ...
+
+    def reproject(self) -> None:
+        ...
+
 
 WidgetFactory = Callable[[SelectorModel, QtWidgets.QWidget], SelectorWidget]
 
@@ -137,9 +143,10 @@ class ColourPickerDockPanel(QtWidgets.QWidget):
         self._readout_panel.committed.connect(self._commit_colour)
         self._build_selector_tabs()
         self._build_layout()
-        self._tabs.currentChanged.connect(self._ensure_selector_for_tab)
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+        self._controller.set_fallback_strategy_provider(self._active_fallback_strategy)
         self._controller_subscription = ColourSubscription(controller, self._on_colour_changed)
-        self.destroyed.connect(self._controller_subscription.disconnect)
+        self.destroyed.connect(self._release_controller)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -206,9 +213,25 @@ class ColourPickerDockPanel(QtWidgets.QWidget):
                 widget.setObjectName(f"{_mode_spec(mode).object_name}-placeholder")
             self._tabs.addTab(widget, _mode_spec(mode).label)
 
+    def _on_tab_changed(self, index: int) -> None:
+        self._ensure_selector_for_tab(index)
+        self._controller.reproject()
+
     def _ensure_selector_for_tab(self, index: int) -> None:
         if 0 <= index < len(self._selector_modes):
             self._ensure_selector(self._selector_modes[index])
+
+    def _active_fallback_strategy(self, intent: ColourIntent) -> object:
+        """Return the fallback strategy for the front tab's slice at ``intent``."""
+
+        return self._selector_model_cache.fallback_strategy_for(self.mode, intent)
+
+    def _release_controller(self, *_args: object) -> None:
+        self._controller_subscription.disconnect()
+        try:
+            self._controller.set_fallback_strategy_provider(None)
+        except (AttributeError, RuntimeError):
+            pass
 
     def _ensure_selector(self, mode: SelectorMode) -> SelectorWidget:
         existing = self._selectors.get(mode)

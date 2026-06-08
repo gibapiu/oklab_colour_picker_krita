@@ -1,9 +1,17 @@
+import math
+
 import numpy as np
+import pytest
 
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.domain.gamut_fallback import (
+    ClippedSrgbFallbackStrategy,
+    SliceProjectionFallbackStrategy,
+)
 from oklab_colour_picker.app.controller import ChangeKind, ColourPickerController, normalize_oklab_for_krita
 from oklab_colour_picker.infrastructure.krita_adapter import KritaForegroundAdapter
+from oklab_colour_picker.models import LightnessChromaSliceModel, LightnessSliceModel
 
 
 def _observe(observed):
@@ -636,6 +644,78 @@ def test_krita_adapter_returns_readback_colour_after_setting_foreground():
 
     assert len(view.set_foreground_calls) == 1
     np.testing.assert_allclose(actual, adapter.get_foreground())
+
+
+def test_out_of_gamut_commit_writes_the_active_slice_projection():
+    scheduler = FakeScheduler()
+    adapter = FakeKritaAdapter()
+    controller = ColourPickerController(adapter, scheduler=scheduler)
+    hue = math.radians(95.0)
+    lightness = 0.5
+    model = LightnessChromaSliceModel(hue=hue)
+    controller.set_fallback_strategy_provider(lambda _intent: SliceProjectionFallbackStrategy(model))
+    chroma = float(color_math.max_chroma_for_lh(lightness, hue)) * 1.5
+    intent = ColourIntent.from_lch(lightness, chroma, hue)
+    projected = ColourIntent.from_lch(*model.project_onto_slice(intent.selector_lch))
+
+    controller.request_foreground_commit(intent)
+    scheduler.run_pending()
+
+    assert len(adapter.set_foreground_calls) == 1
+    # Krita receives the on-plane projection, not the raw out-of-gamut pick.
+    np.testing.assert_allclose(adapter.set_foreground_calls[0], projected.paint_oklab, atol=1e-9)
+    np.testing.assert_allclose(controller.selected_colour, projected.paint_oklab, atol=1e-9)
+
+
+def test_in_gamut_commit_is_written_raw_under_a_slice_strategy():
+    scheduler = FakeScheduler()
+    adapter = FakeKritaAdapter()
+    controller = ColourPickerController(adapter, scheduler=scheduler)
+    hue = math.radians(95.0)
+    model = LightnessChromaSliceModel(hue=hue)
+    controller.set_fallback_strategy_provider(lambda _intent: SliceProjectionFallbackStrategy(model))
+    intent = ColourIntent.from_lch(0.5, 0.04, hue)
+
+    controller.request_foreground_commit(intent)
+    scheduler.run_pending()
+
+    assert len(adapter.set_foreground_calls) == 1
+    np.testing.assert_allclose(adapter.set_foreground_calls[0], intent.paint_oklab, atol=1e-12)
+
+
+def test_fallback_strategy_provider_is_pulled_for_each_presented_colour():
+    # A fixed-lightness plane rebuilt from each colour: presenting a new
+    # lightness must project onto that lightness, never a stale earlier one.
+    scheduler = FakeScheduler()
+    controller = ColourPickerController(FakeKritaAdapter(), scheduler=scheduler)
+    controller.set_fallback_strategy_provider(
+        lambda intent: SliceProjectionFallbackStrategy(
+            LightnessSliceModel(lightness=intent.selector_lch[0])
+        )
+    )
+    seen = []
+    controller.add_colour_listener(lambda snapshot: seen.append(snapshot.colour))
+    hue = math.radians(95.0)
+
+    controller.set_preview_colour(ColourIntent.from_lch(0.5, 0.05, hue))   # in gamut
+    controller.set_preview_colour(ColourIntent.from_lch(0.9, 0.2, hue))    # new plane, OOG
+
+    assert not seen[-1].in_gamut
+    assert seen[-1].resolved_lch[0] == pytest.approx(0.9, abs=1e-9)
+
+
+def test_set_fallback_strategy_provider_is_pure_registration():
+    scheduler = FakeScheduler()
+    controller = ColourPickerController(FakeKritaAdapter(), scheduler=scheduler)
+    controller.request_foreground_commit(ColourIntent.from_lch(0.5, 0.05, 0.0))
+    scheduler.run_pending()
+    observed = []
+    controller.add_colour_listener(lambda snapshot: observed.append(snapshot))
+    observed.clear()
+
+    controller.set_fallback_strategy_provider(lambda _intent: ClippedSrgbFallbackStrategy())
+
+    assert observed == []  # installs policy only; never broadcasts
 
 
 class FakeScheduler:

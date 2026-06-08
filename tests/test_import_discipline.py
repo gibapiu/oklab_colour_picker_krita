@@ -3,6 +3,7 @@ from pathlib import Path
 
 from scripts.checks.architecture_policy import (
     KRITA_IMPORT_ALLOWED,
+    PRESENTED_COLOUR_CONSTRUCTION_ALLOWED,
     QT_OR_KRITA_MODULE_PREFIXES,
     SET_FOREGROUND_ALLOWED,
     UI_LAYER_MODULE_PREFIXES,
@@ -74,6 +75,24 @@ def test_krita_foreground_writes_stay_behind_controller_boundary():
                 offenders.append(path.as_posix())
 
     assert offenders == []
+
+
+def test_presented_colour_is_built_only_by_the_presenter():
+    offenders = []
+    for path, tree in _project_python_asts():
+        if path in PRESENTED_COLOUR_CONSTRUCTION_ALLOWED:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and _constructs_presented_colour(node.func):
+                offenders.append(path.as_posix())
+
+    assert offenders == []
+
+
+def _constructs_presented_colour(func):
+    if isinstance(func, ast.Name):
+        return func.id == "PresentedColour"
+    return isinstance(func, ast.Attribute) and func.attr == "PresentedColour"
 
 
 def test_selection_does_not_read_from_qimage_pixels():

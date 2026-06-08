@@ -130,6 +130,14 @@ class LightnessChromaSliceModel(SelectorModel):
         chroma = max(0.0, min(desired_chroma, max_chroma))
         return (float(lightness), float(chroma), float(self.hue))
 
+    def project_onto_slice(self, lch: OKLCh) -> OKLCh | None:
+        lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
+        if not _on_hue_slice(chroma, hue, self.hue):
+            return None
+        lightness = float(np.clip(lightness, 0.0, 1.0))
+        max_chroma = float(color_math.max_chroma_for_lh(lightness, self.hue))
+        return (lightness, min(max(0.0, chroma), max_chroma), self.hue)
+
     def geometric_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         bounds = size_bounds(size)
         if bounds is None:
