@@ -9,7 +9,7 @@ from typing import Sequence
 
 import numpy as np
 
-from oklab_colour_picker import color_math
+from oklab_colour_picker.domain import color_math
 
 
 @dataclass(frozen=True, init=False)
@@ -106,15 +106,6 @@ class ColourIntent:
     @property
     def is_achromatic(self) -> bool:
         return color_math.is_achromatic_chroma(self.chroma)
-
-    def with_lightness(self, lightness: float) -> "ColourIntent":
-        return self.from_lch(lightness, self.chroma, self.hue)
-
-    def with_chroma(self, chroma: float) -> "ColourIntent":
-        return self.from_lch(self.lightness, chroma, self.hue)
-
-    def with_hue(self, hue: float) -> "ColourIntent":
-        return self.from_lch(self.lightness, self.chroma, hue)
 
     def with_krita_paint_oklab(self, oklab: Sequence[float]) -> "ColourIntent":
         paint = _as_oklab(oklab)

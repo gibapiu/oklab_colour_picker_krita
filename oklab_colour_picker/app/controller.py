@@ -10,12 +10,13 @@ from typing import Callable, Protocol, Sequence
 
 import numpy as np
 
-from oklab_colour_picker.colour_presentation import (
+from oklab_colour_picker.domain.colour_presentation import (
     ColourPresenter,
     PresentedColour,
     default_colour_presenter,
 )
-from oklab_colour_picker.colour_state import (
+from oklab_colour_picker.domain.gamut_fallback import FallbackStrategy
+from oklab_colour_picker.domain.colour_state import (
     ColourIntent,
     normalize_oklab_for_krita as _normalize_oklab_for_krita,
 )
@@ -54,6 +55,7 @@ class ColourSnapshot:
 
 
 ColourListener = Callable[[ColourSnapshot], None]
+FallbackStrategyProvider = Callable[[ColourIntent], FallbackStrategy]
 LOGGER = logging.getLogger(__name__)
 LOCAL_INTERACTION_SYNC_GRACE_SECONDS = 0.75
 
@@ -102,6 +104,7 @@ class ColourPickerController:
         self._scheduler = scheduler if scheduler is not None else ImmediateScheduler()
         self._foreground_timer = foreground_timer
         self._presenter = presenter or default_colour_presenter()
+        self._fallback_strategy_provider: FallbackStrategyProvider | None = None
         self._colour_listeners: list[ColourListener] = []
         self._selected_intent: ColourIntent | None = None
         self._pending_commit: ColourIntent | None = None
@@ -141,6 +144,23 @@ class ColourPickerController:
         except ValueError:
             pass
 
+    def set_fallback_strategy_provider(
+        self, provider: FallbackStrategyProvider | None
+    ) -> None:
+        """Set the policy that resolves each colour's out-of-gamut fallback.
+
+        The provider is queried per presented colour. This only stores it; it
+        does not present or broadcast.
+        """
+
+        self._fallback_strategy_provider = provider
+
+    def reproject(self) -> None:
+        """Re-present the current colour unchanged - use when fallback policy changed but the colour did not."""
+
+        if self._selected_intent is not None:
+            self._broadcast(self._selected_intent, ChangeKind.PREVIEW)
+
     def _broadcast(self, intent: ColourIntent, kind: ChangeKind) -> None:
         """Notify every listener uniformly (no skip-the-originator logic).
 
@@ -156,7 +176,13 @@ class ColourPickerController:
                 LOGGER.exception("colour listener failed")
 
     def _snapshot(self, intent: ColourIntent, kind: ChangeKind) -> ColourSnapshot:
-        return ColourSnapshot(self._presenter.present(intent), kind)
+        return ColourSnapshot(self._present(intent), kind)
+
+    def _present(self, intent: ColourIntent) -> PresentedColour:
+        if self._fallback_strategy_provider is None:
+            return self._presenter.present(intent)
+        strategy = self._fallback_strategy_provider(intent)
+        return self._presenter.with_fallback_strategy(strategy).present(intent)
 
     def set_preview_colour(self, oklab: ColourIntent | Sequence[float] | None) -> None:
         """Set transient UI preview state without replacing any pending commit.
@@ -238,16 +264,17 @@ class ColourPickerController:
         if intent is None:
             return
 
-        normalized = intent.quantized_paint_oklab
+        paint_intent = self._resolve_for_paint(intent)
+        normalized = paint_intent.quantized_paint_oklab
         if self._last_committed_colour is not None and _quantized_equal(normalized, self._last_committed_colour):
-            self._selected_intent = intent
+            self._selected_intent = paint_intent
             self._broadcast(
-                intent.with_krita_paint_oklab(self._last_committed_colour),
+                paint_intent.with_krita_paint_oklab(self._last_committed_colour),
                 ChangeKind.COMMIT,
             )
             return
 
-        committed = self._adapter.set_foreground(intent.paint_oklab)
+        committed = self._adapter.set_foreground(paint_intent.paint_oklab)
         if committed is None:
             restored = selection_before_commit
             self._selected_intent = restored
@@ -259,11 +286,19 @@ class ColourPickerController:
         self._commit_token += 1
         self._last_committed_token = self._commit_token
         self._last_committed_colour = normalize_oklab_for_krita(committed)
-        self._selected_intent = intent
+        self._selected_intent = paint_intent
         self._broadcast(
-            intent.with_krita_paint_oklab(self._last_committed_colour),
+            paint_intent.with_krita_paint_oklab(self._last_committed_colour),
             ChangeKind.COMMIT,
         )
+
+    def _resolve_for_paint(self, intent: ColourIntent) -> ColourIntent:
+        """Return the colour to paint for ``intent``: itself when in gamut, else its fallback."""
+
+        presented = self._present(intent)
+        if presented.in_gamut:
+            return intent
+        return presented.fallback.resolved
 
     def _is_self_feedback(self, normalized_colour: np.ndarray) -> bool:
         return (

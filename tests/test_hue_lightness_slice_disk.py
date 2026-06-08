@@ -6,9 +6,9 @@ pytest.importorskip("PyQt5")
 
 from PyQt5 import QtCore, QtGui
 
-from oklab_colour_picker.selector_models import HueLightnessSliceModel
-from oklab_colour_picker.widgets import HueLightnessSliceDiskWidget
-from oklab_colour_picker.colour_state import ColourIntent
+from oklab_colour_picker.models import HueLightnessSliceModel
+from oklab_colour_picker.ui.selectors import HueLightnessSliceDiskWidget
+from oklab_colour_picker.domain.colour_state import ColourIntent
 
 
 def _widget(model):
@@ -16,7 +16,7 @@ def _widget(model):
 
 
 def _selector(model):
-    from oklab_colour_picker.widgets.selector import SelectorWidget
+    from oklab_colour_picker.ui.selectors.selector import SelectorWidget
 
     return SelectorWidget(model)
 
@@ -41,7 +41,7 @@ def test_disk_widget_picks_through_lightness_overlay(qtbot):
 
 
 def test_disk_widget_renders_lightness_guide_rings_on_top_of_base(qtbot):
-    from oklab_colour_picker.widgets.selector import SelectorWidget
+    from oklab_colour_picker.ui.selectors.selector import SelectorWidget
 
     model = HueLightnessSliceModel(chroma=0.03)
     overlay = _widget(model)

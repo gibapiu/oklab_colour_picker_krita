@@ -1,9 +1,9 @@
 import numpy as np
 
-from oklab_colour_picker import color_math
-from oklab_colour_picker.colour_presentation import ColourPresenter
-from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.gamut_fallback import ClippedSrgbFallbackStrategy
+from oklab_colour_picker.domain import color_math
+from oklab_colour_picker.domain.colour_presentation import ColourPresenter
+from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.domain.gamut_fallback import ClippedSrgbFallbackStrategy
 
 
 def test_colour_presenter_resolves_intent_and_fallback_once():

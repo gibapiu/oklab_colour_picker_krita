@@ -2,25 +2,22 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from enum import Enum
 from typing import Callable, Protocol, Sequence
 
 import numpy as np
 from PyQt5 import QtCore, QtWidgets
 
-from oklab_colour_picker import color_math
-from oklab_colour_picker.colour_presentation import PresentedColour
-from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.controller import ChangeKind, ColourSnapshot
-from oklab_colour_picker.selector_models import (
-    HueLightnessSliceModel,
-    LightnessChromaSliceModel,
-    LightnessSliceModel,
+from oklab_colour_picker.app.selector_model_cache import (
+    SelectorMode,
+    SelectorModelCache,
 )
-from oklab_colour_picker.widgets.readout_panel import ReadoutPanel
-from oklab_colour_picker.widgets.selector import SelectorWidget
+from oklab_colour_picker.domain.colour_presentation import PresentedColour
+from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.app.controller import ChangeKind, ColourSnapshot
+from oklab_colour_picker.models import SelectorModel
+from oklab_colour_picker.ui.readout import ReadoutPanel
+from oklab_colour_picker.ui.selectors.selector import SelectorWidget
 
 
 ColourListener = Callable[[ColourSnapshot], None]
@@ -64,134 +61,40 @@ class DockController(Protocol):
     def sync_external_foreground(self, *, force: bool = False) -> bool:
         ...
 
+    def set_fallback_strategy_provider(self, provider: object) -> None:
+        ...
 
-class SelectorMode(str, Enum):
-    LIGHTNESS_SLICE = "lightness_slice"
-    HUE_LIGHTNESS_SLICE = "hue_lightness_slice"
-    LIGHTNESS_CHROMA_SLICE = "lightness_chroma_slice"
+    def reproject(self) -> None:
+        ...
 
 
-ModelFactory = Callable[[float, float, float], object]
-CoordinateFactory = Callable[[float, float, float], "SliceCoordinate"]
-WidgetFactory = Callable[[object, QtWidgets.QWidget], SelectorWidget]
-
-# OKLab -> OKLCh recovery can jitter by a few ulps for fixed hue/chroma slices.
-# This epsilon is many orders below a visible slice step but large enough to
-# make same-slice cache hits deterministic across normal float round-trips.
-SLICE_COORDINATE_ROUNDTRIP_EPSILON = 1.0 / (255.0 ** 3)
+WidgetFactory = Callable[[SelectorModel, QtWidgets.QWidget], SelectorWidget]
 
 
 @dataclass(frozen=True)
 class ModeSpec:
     label: str
     object_name: str
-    model_factory: ModelFactory
-    coordinate_factory: CoordinateFactory
     widget_factory: WidgetFactory
 
 
-@dataclass(frozen=True)
-class SliceModelCacheEntry:
-    """Cached selector model keyed by an equivalent fixed slice coordinate."""
-
-    coordinate: "SliceCoordinate"
-    model: object
-
-
-class SliceCoordinate(Protocol):
-    def equivalent_to(self, other: "SliceCoordinate") -> bool:
-        ...
-
-
-@dataclass(frozen=True)
-class LinearSliceCoordinate:
-    value: float
-
-    def equivalent_to(self, other: SliceCoordinate) -> bool:
-        return (
-            isinstance(other, LinearSliceCoordinate)
-            and math.isclose(
-                self.value,
-                other.value,
-                rel_tol=0.0,
-                abs_tol=SLICE_COORDINATE_ROUNDTRIP_EPSILON,
-            )
-        )
-
-
-@dataclass(frozen=True)
-class ChromaSliceCoordinate:
-    value: float
-    hue_when_achromatic: float
-
-    def equivalent_to(self, other: SliceCoordinate) -> bool:
-        if not isinstance(other, ChromaSliceCoordinate):
-            return False
-        if _both_achromatic_chroma(self.value, other.value):
-            return (
-                _circular_distance(self.hue_when_achromatic, other.hue_when_achromatic)
-                <= SLICE_COORDINATE_ROUNDTRIP_EPSILON
-            )
-        if not math.isclose(
-            self.value,
-            other.value,
-            rel_tol=0.0,
-            abs_tol=SLICE_COORDINATE_ROUNDTRIP_EPSILON,
-        ):
-            return False
-        return True
-
-
-@dataclass(frozen=True)
-class HueSliceCoordinate:
-    radians: float
-
-    def equivalent_to(self, other: SliceCoordinate) -> bool:
-        return (
-            isinstance(other, HueSliceCoordinate)
-            and _circular_distance(self.radians, other.radians)
-            <= SLICE_COORDINATE_ROUNDTRIP_EPSILON
-        )
-
-
-def _lightness_slice_model(lightness: float, _chroma: float, _hue: float) -> object:
-    return LightnessSliceModel(lightness=lightness)
-
-
-def _hue_lightness_slice_model(_lightness: float, chroma: float, hue: float) -> object:
-    if color_math.is_achromatic_chroma(chroma):
-        return HueLightnessSliceModel(chroma=chroma, achromatic_indicator_hue=hue)
-    return HueLightnessSliceModel(chroma=chroma)
-
-
-def _lightness_chroma_slice_model(_lightness: float, _chroma: float, hue: float) -> object:
-    return LightnessChromaSliceModel(hue=hue)
-
-
-def _lightness_coordinate(lightness: float, _chroma: float, _hue: float) -> SliceCoordinate:
-    return LinearSliceCoordinate(lightness)
-
-
-def _chroma_coordinate(_lightness: float, chroma: float, hue: float) -> SliceCoordinate:
-    return ChromaSliceCoordinate(chroma, _hue_when_achromatic(chroma, hue))
-
-
-def _hue_coordinate(_lightness: float, _chroma: float, hue: float) -> SliceCoordinate:
-    return HueSliceCoordinate(hue % math.tau)
-
-
-def _selector_widget(model: object, parent: QtWidgets.QWidget) -> SelectorWidget:
+def _selector_widget(model: SelectorModel, parent: QtWidgets.QWidget) -> SelectorWidget:
     return SelectorWidget(model, parent)
 
 
-def _lightness_slice_widget(model: object, parent: QtWidgets.QWidget) -> SelectorWidget:
-    from oklab_colour_picker.widgets.lightness_slice_disk import LightnessSliceDiskWidget
+def _lightness_slice_widget(model: SelectorModel, parent: QtWidgets.QWidget) -> SelectorWidget:
+    from oklab_colour_picker.ui.selectors.lightness_slice_disk import LightnessSliceDiskWidget
 
     return LightnessSliceDiskWidget(model, parent)
 
 
-def _hue_lightness_slice_widget(model: object, parent: QtWidgets.QWidget) -> SelectorWidget:
-    from oklab_colour_picker.widgets.hue_lightness_slice_disk import HueLightnessSliceDiskWidget
+def _hue_lightness_slice_widget(
+    model: SelectorModel,
+    parent: QtWidgets.QWidget,
+) -> SelectorWidget:
+    from oklab_colour_picker.ui.selectors.hue_lightness_slice_disk import (
+        HueLightnessSliceDiskWidget,
+    )
 
     return HueLightnessSliceDiskWidget(model, parent)
 
@@ -200,22 +103,16 @@ MODE_SPECS = {
     SelectorMode.LIGHTNESS_SLICE: ModeSpec(
         "Hue/Chroma",
         "lightness-slice-selector",
-        _lightness_slice_model,
-        _lightness_coordinate,
         _lightness_slice_widget,
     ),
     SelectorMode.HUE_LIGHTNESS_SLICE: ModeSpec(
         "Hue/Lightness",
         "hue-lightness-slice-selector",
-        _hue_lightness_slice_model,
-        _chroma_coordinate,
         _hue_lightness_slice_widget,
     ),
     SelectorMode.LIGHTNESS_CHROMA_SLICE: ModeSpec(
         "Lightness/Chroma",
         "lightness-chroma-slice-selector",
-        _lightness_chroma_slice_model,
-        _hue_coordinate,
         _selector_widget,
     ),
 }
@@ -240,15 +137,16 @@ class ColourPickerDockPanel(QtWidgets.QWidget):
         # SelectorWidget structurally satisfies ColourView; the readout does
         # too. The dock broadcasts to both through that one contract.
         self._selectors: dict[SelectorMode, SelectorWidget] = {}
-        self._selector_model_cache: dict[SelectorMode, SliceModelCacheEntry] = {}
+        self._selector_model_cache = SelectorModelCache()
         self._readout_panel = ReadoutPanel(self)
         self._readout_panel.previewed.connect(self._preview_colour)
         self._readout_panel.committed.connect(self._commit_colour)
         self._build_selector_tabs()
         self._build_layout()
-        self._tabs.currentChanged.connect(self._ensure_selector_for_tab)
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+        self._controller.set_fallback_strategy_provider(self._active_fallback_strategy)
         self._controller_subscription = ColourSubscription(controller, self._on_colour_changed)
-        self.destroyed.connect(self._controller_subscription.disconnect)
+        self.destroyed.connect(self._release_controller)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -315,9 +213,25 @@ class ColourPickerDockPanel(QtWidgets.QWidget):
                 widget.setObjectName(f"{_mode_spec(mode).object_name}-placeholder")
             self._tabs.addTab(widget, _mode_spec(mode).label)
 
+    def _on_tab_changed(self, index: int) -> None:
+        self._ensure_selector_for_tab(index)
+        self._controller.reproject()
+
     def _ensure_selector_for_tab(self, index: int) -> None:
         if 0 <= index < len(self._selector_modes):
             self._ensure_selector(self._selector_modes[index])
+
+    def _active_fallback_strategy(self, intent: ColourIntent) -> object:
+        """Return the fallback strategy for the front tab's slice at ``intent``."""
+
+        return self._selector_model_cache.fallback_strategy_for(self.mode, intent)
+
+    def _release_controller(self, *_args: object) -> None:
+        self._controller_subscription.disconnect()
+        try:
+            self._controller.set_fallback_strategy_provider(None)
+        except (AttributeError, RuntimeError):
+            pass
 
     def _ensure_selector(self, mode: SelectorMode) -> SelectorWidget:
         existing = self._selectors.get(mode)
@@ -327,7 +241,7 @@ class ColourPickerDockPanel(QtWidgets.QWidget):
         seed = self._view_seed_intent
         widget = _build_selector_widget(
             mode,
-            self._cached_model_for_colour(mode, seed),
+            self._selector_model_cache.model_for(mode, seed),
             self,
         )
         widget.setObjectName(_mode_spec(mode).object_name)
@@ -368,32 +282,14 @@ class ColourPickerDockPanel(QtWidgets.QWidget):
         self,
         mode: SelectorMode,
         colour: PresentedColour,
-    ) -> Callable[[], object]:
-        return lambda: self._cached_model_for_colour(mode, colour.intent)
-
-    def _cached_model_for_colour(
-        self,
-        mode: SelectorMode,
-        colour: ColourIntent | Sequence[float],
-    ) -> object:
-        intent = self._intent_from_value(colour)
-        lch = intent.selector_lch
-        coordinate = _fixed_slice_coordinate(mode, lch)
-        cached = self._selector_model_cache.get(mode)
-        if cached is not None and cached.coordinate.equivalent_to(coordinate):
-            return cached.model
-        model = _model_for_oklch(mode, lch)
-        self._selector_model_cache[mode] = SliceModelCacheEntry(coordinate, model)
-        return model
+    ) -> Callable[[], SelectorModel]:
+        return lambda: self._selector_model_cache.model_for(mode, colour.intent)
 
     def _preview_colour(self, oklab: ColourIntent | Sequence[float] | None) -> None:
         self._controller.set_preview_colour(oklab)
 
     def _commit_colour(self, oklab: ColourIntent | Sequence[float] | None) -> None:
         self._controller.request_foreground_commit(oklab)
-
-    def _intent_from_value(self, value: ColourIntent | Sequence[float]) -> ColourIntent:
-        return ColourIntent.from_value(value, achromatic_hue=self._view_seed_intent.hue)
 
 
 class ColourSubscription:
@@ -415,37 +311,10 @@ class ColourSubscription:
 
 def _build_selector_widget(
     mode: SelectorMode,
-    model: object,
+    model: SelectorModel,
     parent: QtWidgets.QWidget,
-) -> SelectorWidget | QtWidgets.QWidget:
+) -> SelectorWidget:
     return _mode_spec(mode).widget_factory(model, parent)
-
-
-def _model_for_oklch(mode: SelectorMode, oklch: tuple[float, float, float]) -> object:
-    lightness, chroma, hue = oklch
-    return _mode_spec(mode).model_factory(lightness, chroma, hue)
-
-
-def _fixed_slice_coordinate(
-    mode: SelectorMode,
-    oklch: tuple[float, float, float],
-) -> SliceCoordinate:
-    return _mode_spec(mode).coordinate_factory(*oklch)
-
-
-def _circular_distance(left: float, right: float) -> float:
-    distance = abs((left - right) % math.tau)
-    return min(distance, math.tau - distance)
-
-
-def _both_achromatic_chroma(left: float, right: float) -> bool:
-    return color_math.is_achromatic_chroma(max(left, right))
-
-
-def _hue_when_achromatic(chroma: float, hue: float) -> float:
-    if color_math.is_achromatic_chroma(chroma):
-        return float(hue % math.tau)
-    return 0.0
 
 
 def _mode_spec(mode: SelectorMode) -> ModeSpec:

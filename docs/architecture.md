@@ -19,15 +19,15 @@ Two things to care about above all:
 
 ### 2.1 Layers
 
-The code is split into five layers, stacked bottom to top. Lower layers don't know about higher ones. Only the pure layers (blue) hold colour maths. The controller (yellow) is the single owner of the current colour. Only the top layer touches Krita. Dedicated tests (`tests/test_import_discipline.py`) enforces this.
+The code is split into five layers, stacked bottom to top. Lower layers don't know about higher ones. Only the pure layers (blue) hold colour maths. The controller (yellow) is the single owner of the current colour. Only the top layer touches Krita. Dedicated tests (`tests/test_import_discipline.py`) enforce this.
 
 ```mermaid
 flowchart LR
-    A["<b>color_math · colour_state · colour_presentation · gamut_fallback · models</b><br/><i>pure maths, value objects, fallback presentation, slice contract</i>"]
-    B["<b>renderers</b><br/><i>NumPy → RGBA buffers</i>"]
-    C["<b>controller</b><br/><i>the one place that owns the colour</i>"]
-    D["<b>dock + widgets</b><br/><i>Qt views: emit intent, draw pushed state</i>"]
-    E["<b>krita_adapter · plugin</b><br/><i>Krita registration + I/O ports</i>"]
+    A["<b>domain · models</b><br/><i>pure maths, value objects, interaction state, slice contracts</i>"]
+    B["<b>render</b><br/><i>NumPy → RGBA buffers</i>"]
+    C["<b>app</b><br/><i>colour ownership, read models, and selector reuse policy</i>"]
+    D["<b>ui</b><br/><i>Qt dock and views: emit intent, draw pushed state</i>"]
+    E["<b>infrastructure · plugin</b><br/><i>Krita registration + I/O adapters</i>"]
     A --> B --> C --> D --> E
     style A fill:#172b69, color: #ffffff
     style B fill:#172b69, color: #ffffff
@@ -116,6 +116,7 @@ A few rules the rest of the code leans on:
 - Only the controller writes colour. Views never read each other.
 
 The readout panel runs the same idea with two states: `IDLE` and `EDITING`. While editing, any colour pushed from elsewhere is held aside (not applied). If you commit, your edit wins. If you cancel, the held colour comes back.
+`ReadoutPresenter` separately maps the chosen `PresentedColour`, active L/C/H values, and revert target into one immutable display state; the Qt panel only applies that state to its controls.
 
 ---
 
@@ -125,21 +126,17 @@ Choices made so the picker *feels* right under an artist's hand:
 
 - **Hold the hue at `chroma=0`.** Hue is undefined at zero chroma in maths, but artists expect "raise chroma and get my hue back". The intent object carries the hue even when the paint is neutral grey.
 - **Out-of-gamut still drags smoothly.** When the cursor leaves the in-gamut area, the model snaps to the nearest valid point. A dual-ring indicator (solid where you wanted, dashed where it landed) shows what happened - the gesture never breaks.
-- **Selected-colour fallback matches Krita.** Once a colour is selected, fallback display is resolved by `gamut_fallback` through clipped 8-bit sRGB - the same colour the swatch shows and Krita writes. Selector drag snapping is only for gesture continuity; it is not reused as the selected-colour fallback.
+- **Out-of-gamut fallback stays on the slice.** A colour that can't be painted projects onto the active tab's plane - clamped to that slice's gamut leaf, the same leaf a drag snaps to. One projected colour does every job: the swatch shows it, Krita paints it, and the dashed ring lands on it. The projection never leaves the plane, so the ring is always visible. The fallback is per-slice, chosen by the active tab and built lazily beside its model - so the same pick resolves onto whichever plane you're working on, which is exactly what an artist expects.
 
 ```mermaid
 flowchart LR
-    subgraph IN["In-gamut"]
-      direction LR
-      A((●)):::solid
-    end
-    subgraph OUT["Out-of-gamut"]
-      direction LR
-      B((●)):::solid -. "snapped to" .-> C((○)):::dashed
-    end
-    IN ~~~ OUT
-    classDef solid fill:#444,color:#fff,stroke:#000
-    classDef dashed fill:#fff,color:#000,stroke:#444,stroke-dasharray:3 3
+    D([desired colour<br/>out of gamut]) --> P["active slice<br/>project onto plane"]
+    P --> R(["one resolved colour<br/>on the slice leaf"])
+    R --> S[swatch]
+    R --> K[(Krita paint)]
+    R --> I["dashed ring<br/>solid = wanted · dashed = landed"]
+    style D fill:#99460e, color:#000000
+    style R fill:#e8a93f, color:#000000
 ```
 
 - **No flicker between views.** Self-feedback checks, `PINNED` echo checks, and adapter writes all compare colours in 8-bit sRGB - Krita's own precision, never raw float `==`. This kills a whole class of flicker bugs.
@@ -151,7 +148,7 @@ flowchart LR
 
 Choices made to keep the picker fast under continuous drag:
 
-- **Cache the slice model.** A slice is only rebuilt when its fixed coordinate actually changes - not on every preview tick. Views that are mid-gesture are skipped entirely.
+- **Cache the slice model.** The Qt-free `SelectorModelCache` rebuilds a slice only when its fixed coordinate changes - not on every preview tick. Views that are mid-gesture are skipped entirely.
 - **NumPy on the hot path.** Pixel maths, gamut masks, and snap searches are vectorised. Slice and slider images are RGBA buffers Qt can blit directly.
 - **Debounce commits.** Quick drags coalesce into one adapter write on the next event-loop turn - hundreds of mouse-move events become one Krita write.
 

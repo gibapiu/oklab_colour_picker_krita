@@ -9,7 +9,7 @@ from typing import Sequence
 import numpy as np
 import numpy.typing as npt
 
-from oklab_colour_picker import color_math
+from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.models.base import (
     OKLCh,
     Position,
@@ -30,6 +30,8 @@ CHROMA_EPSILON = 1e-9
 LIGHTNESS_EPSILON = 1e-9
 _LIGHTNESS_SNAP_SAMPLES = np.linspace(0.0, 1.0, 257)
 _SNAP_BOUNDARY_ITERATIONS = 20
+_HUE_CUSP_SAMPLES = 1440
+_hue_cusp_table_cache: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
 
 
 @dataclass(frozen=True)
@@ -124,6 +126,24 @@ class HueLightnessSliceModel(SelectorModel):
             (float(lightness), float(self.chroma), float(hue)),
             position_from_circle(1.0 - lightness, hue, size),
         )
+
+    def project_onto_slice(self, lch: OKLCh) -> OKLCh | None:
+        if not _on_fixed_chroma_slice(float(lch[1]), self.chroma):
+            return None
+        return self._nearest_disk_colour(
+            float(np.clip(float(lch[0]), 0.0, 1.0)),
+            float(lch[2]),
+        )
+
+    def _nearest_disk_colour(self, lightness: float, hue: float) -> OKLCh | None:
+        hosted_lightness = _snap_lightness_to_gamut(self.chroma, hue, lightness)
+        if hosted_lightness is not None:
+            return (hosted_lightness, self.chroma, hue)
+        nearest = _nearest_hue_reaching_chroma(self.chroma, hue)
+        if nearest is None:
+            return None
+        cusp_lightness, hosting_hue = nearest
+        return (cusp_lightness, self.chroma, hosting_hue)
 
     def geometric_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         bounds = size_bounds(size)
@@ -220,6 +240,41 @@ def _bisect_lightness_boundary(
 
 def _lightness_in_gamut(chroma: float, hue: float, lightness: float) -> bool:
     return bool(chroma <= color_math.max_chroma_for_lh(lightness, hue) + CHROMA_EPSILON)
+
+
+def _nearest_hue_reaching_chroma(chroma: float, hue: float) -> tuple[float, float] | None:
+    """Cusp ``(lightness, hue)`` of the nearest hue whose gamut reaches ``chroma``.
+
+    ``None`` only when ``chroma`` exceeds the whole sRGB gamut, leaving the disk
+    with no in-gamut pixel at all.
+    """
+
+    hues, cusp_lightness, cusp_chroma = _hue_cusp_table()
+    reaches = cusp_chroma >= chroma - CHROMA_EPSILON
+    if not reaches.any():
+        return None
+    distance = np.where(reaches, _angular_distance(hues, hue), np.inf)
+    nearest = int(np.argmin(distance))
+    return float(cusp_lightness[nearest]), float(hues[nearest])
+
+
+def _angular_distance(hues: np.ndarray, hue: float) -> np.ndarray:
+    return np.abs((hues - hue + math.pi) % math.tau - math.pi)
+
+
+def _hue_cusp_table() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per-hue sRGB cusp ``(hues, lightness, chroma)``, sampled once on first use.
+
+    The cusp is a fixed function of hue, so the table is built lazily to keep
+    its sweep out of import.
+    """
+
+    global _hue_cusp_table_cache
+    if _hue_cusp_table_cache is None:
+        hues = np.linspace(0.0, math.tau, _HUE_CUSP_SAMPLES, endpoint=False)
+        lightness, chroma = color_math.find_cusp(np.cos(hues), np.sin(hues))
+        _hue_cusp_table_cache = (hues, np.asarray(lightness, float), np.asarray(chroma, float))
+    return _hue_cusp_table_cache
 
 
 def _on_fixed_chroma_slice(chroma: float, fixed_chroma: float) -> bool:

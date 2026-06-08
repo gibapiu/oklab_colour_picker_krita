@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from oklab_colour_picker.colour_presentation import PresentedColour
-from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.gamut_fallback import FallbackResult
+from oklab_colour_picker.domain.colour_presentation import PresentedColour
+from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.domain.gamut_fallback import FallbackResult
 
 
 def presented_colour(

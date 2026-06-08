@@ -9,7 +9,7 @@ from typing import Sequence
 import numpy as np
 import numpy.typing as npt
 
-from oklab_colour_picker import color_math
+from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.models.base import (
     OKLCh,
     Position,
@@ -125,6 +125,13 @@ class LightnessSliceModel(SelectorModel):
         max_chroma = float(color_math.max_chroma_for_lh(self.lightness, hue))
         chroma = max(0.0, min(desired_chroma, max_chroma))
         return (self.lightness, float(chroma), float(hue))
+
+    def project_onto_slice(self, lch: OKLCh) -> OKLCh | None:
+        lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
+        if abs(lightness - self.lightness) > LIGHTNESS_EPSILON:
+            return None
+        max_chroma = float(color_math.max_chroma_for_lh(self.lightness, hue))
+        return (self.lightness, min(max(0.0, chroma), max_chroma), float(hue))
 
     def geometric_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])

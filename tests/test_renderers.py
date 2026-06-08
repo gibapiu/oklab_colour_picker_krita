@@ -3,9 +3,10 @@ import math
 import numpy as np
 import pytest
 
-from oklab_colour_picker import color_math
-from oklab_colour_picker.renderers import render_rgba
-from oklab_colour_picker.selector_models import (
+from oklab_colour_picker.domain import color_math
+from oklab_colour_picker.render import renderers
+from oklab_colour_picker.render.renderers import render_rgba
+from oklab_colour_picker.models import (
     LightnessChromaSliceModel,
     HueLightnessSliceModel,
     LightnessSliceModel,
@@ -105,6 +106,86 @@ def test_hue_lightness_slice_renderer_alpha_marks_fixed_chroma_gamut():
 
     assert np.count_nonzero(rgba[..., 3] == 0) > 0
     assert np.count_nonzero(rgba[..., 3] == 255) > 0
+
+
+def test_axis_track_hue_marks_out_of_gamut_with_checker():
+    rgba = renderers.render_axis_track(
+        renderers.AXIS_H,
+        (0.95, color_math.SRGB_MAX_CHROMA * 0.9),
+        color_math.SRGB_MAX_CHROMA,
+        (256, 12),
+    )
+
+    assert np.any(np.all(rgba[..., :3] == 120, axis=-1))
+
+
+def test_axis_track_chroma_starts_in_gamut_at_zero_chroma():
+    rgba = renderers.render_axis_track(
+        renderers.AXIS_C,
+        (0.5, 0.0),
+        color_math.SRGB_MAX_CHROMA,
+        (256, 12),
+    )
+    left = rgba[:, 0, :3]
+
+    assert not np.any(np.all(left == 120, axis=-1))
+    assert not np.any(np.all(left == 200, axis=-1))
+
+
+def test_axis_track_lightness_extremes_are_out_of_gamut_for_chroma():
+    rgba = renderers.render_axis_track(
+        renderers.AXIS_L,
+        (0.15, 0.0),
+        color_math.SRGB_MAX_CHROMA,
+        (256, 12),
+    )
+
+    for column in (0, -1):
+        assert tuple(rgba[0, column, :3]) in {
+            (120, 120, 120),
+            (200, 200, 200),
+        }
+
+
+def test_axis_track_rejects_unknown_axis():
+    with pytest.raises(ValueError):
+        renderers.render_axis_track(
+            "Q",
+            (0.5, 0.0),
+            color_math.SRGB_MAX_CHROMA,
+            (32, 10),
+        )
+
+
+def test_axis_track_hue_chroma_floor_lifts_neutral_colours():
+    flat = renderers.render_axis_track(
+        renderers.AXIS_H,
+        (0.5, 0.0),
+        color_math.SRGB_MAX_CHROMA,
+        (64, 8),
+    )
+    floored = renderers.render_axis_track(
+        renderers.AXIS_H,
+        (0.5, 0.0),
+        color_math.SRGB_MAX_CHROMA,
+        (64, 8),
+        hue_chroma_floor=0.08,
+    )
+
+    assert np.all(flat[..., :3] == flat[0, 0, :3])
+    assert len({tuple(floored[0, x, :3]) for x in range(floored.shape[1])}) > 8
+
+
+def test_axis_track_hue_chroma_floor_preserves_gamut_classification():
+    rgba = renderers.render_axis_track(
+        renderers.AXIS_H,
+        (0.5, color_math.SRGB_MAX_CHROMA * 0.95),
+        color_math.SRGB_MAX_CHROMA,
+        (256, 12),
+        hue_chroma_floor=0.001,
+    )
+
+    assert np.any(np.all(rgba[..., :3] == 120, axis=-1))
 
 
 def _quantize8(oklab):

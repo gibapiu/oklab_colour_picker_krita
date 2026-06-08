@@ -5,7 +5,7 @@ QApplication, no widgets — which is the whole point of the humble-object
 split: the interaction logic is unit-testable in isolation.
 """
 
-from oklab_colour_picker.selector_interaction import (
+from oklab_colour_picker.domain.selector_interaction import (
     Broadcast,
     Dragging,
     FocusOut,
@@ -203,7 +203,7 @@ def test_reframe_only_resets_pinned():
     assert drag.reframe(ctx).state is drag
 
 
-def test_interaction_facade_dispatches_commands_and_records_transitions():
+def test_interaction_facade_dispatches_commands():
     ctx = FakeCtx()
     interaction = SelectorInteraction()
 
@@ -217,7 +217,7 @@ def test_interaction_facade_dispatches_commands_and_records_transitions():
     result = interaction.dispatch(ctx, Broadcast(3.4))
     assert result.handled
     assert not result.rendered_broadcast
-    assert interaction.transition_log == ("IDLE", "DRAGGING", "PINNED")
+    assert interaction.state_kind is StateKind.PINNED
 
     result = interaction.dispatch(ctx, Reframe())
     assert result.handled

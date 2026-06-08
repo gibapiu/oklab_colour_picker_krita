@@ -20,7 +20,7 @@ def test_color_math_import_meets_cold_start_budget():
     script = """
 import time
 start = time.perf_counter()
-import oklab_colour_picker.color_math
+import oklab_colour_picker.domain.color_math
 print(time.perf_counter() - start)
 """
 

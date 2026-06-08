@@ -6,8 +6,8 @@ from collections.abc import Callable, Sequence
 
 import numpy as np
 
-from oklab_colour_picker import color_math
-from oklab_colour_picker.controller import normalize_oklab_for_krita
+from oklab_colour_picker.domain import color_math
+from oklab_colour_picker.app.controller import normalize_oklab_for_krita
 
 
 SRGB_COLOR_MODEL = "RGBA"

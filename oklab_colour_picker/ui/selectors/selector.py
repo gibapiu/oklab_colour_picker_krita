@@ -8,16 +8,17 @@ from typing import Callable, Sequence
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-from oklab_colour_picker import renderers, selector_interaction
-from oklab_colour_picker.colour_presentation import (
+from oklab_colour_picker.domain import selector_interaction
+from oklab_colour_picker.domain.colour_presentation import (
     PresentedColour,
     require_presented_colour,
 )
-from oklab_colour_picker.colour_state import ColourIntent
-from oklab_colour_picker.controller import normalize_oklab_for_krita
+from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.app.controller import normalize_oklab_for_krita
 from oklab_colour_picker.models.base import positions_close
-from oklab_colour_picker.selector_interaction import Indicator, Pick, PickResult, Ring
-from oklab_colour_picker.selector_models import SelectorModel, SelectorSelection
+from oklab_colour_picker.domain.selector_interaction import Indicator, Pick, PickResult, Ring
+from oklab_colour_picker.models import SelectorModel, SelectorSelection
+from oklab_colour_picker.render import renderers
 
 
 @dataclass(frozen=True)
@@ -72,20 +73,6 @@ class SelectorWidget(QtWidgets.QWidget):
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.setMinimumSize(32, 32)
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-
-    # -- State-machine surface ----------------------------------------
-
-    @property
-    def state(self) -> str:
-        return self._interaction.state_name
-
-    @property
-    def anchor(self) -> tuple[float, float] | None:
-        return self._interaction.anchor
-
-    @property
-    def transition_log(self) -> tuple[str, ...]:
-        return self._interaction.transition_log
 
     def _dispatch(
         self, command: selector_interaction.SelectorCommand

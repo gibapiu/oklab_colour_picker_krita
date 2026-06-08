@@ -15,54 +15,34 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    from scripts.checks.architecture_policy import (
+        KRITA_IMPORT_ALLOWED,
+        QT_OR_KRITA_MODULE_PREFIXES,
+        SET_FOREGROUND_ALLOWED,
+        UI_LAYER_MODULE_PREFIXES,
+        import_from_references,
+        is_declared_package_module,
+        is_lower_layer_file,
+        is_pure_layer_file,
+        starts_with_any,
+    )
+except ModuleNotFoundError:
+    from architecture_policy import (  # type: ignore[no-redef]
+        KRITA_IMPORT_ALLOWED,
+        QT_OR_KRITA_MODULE_PREFIXES,
+        SET_FOREGROUND_ALLOWED,
+        UI_LAYER_MODULE_PREFIXES,
+        import_from_references,
+        is_declared_package_module,
+        is_lower_layer_file,
+        is_pure_layer_file,
+        starts_with_any,
+    )
+
 
 ROOT = Path(__file__).resolve().parents[2]
 LEGACY_PREFIX = "legacy-plugin/"
-KRITA_ALLOWED = {
-    Path("oklab_colour_picker/plugin.py"),
-    Path("oklab_colour_picker/controller.py"),
-    Path("oklab_colour_picker/krita_adapter.py"),
-}
-PURE_NO_QT = {
-    Path("oklab_colour_picker/colour_presentation.py"),
-    Path("oklab_colour_picker/colour_state.py"),
-    Path("oklab_colour_picker/color_math.py"),
-    Path("oklab_colour_picker/gamut_fallback.py"),
-    Path("oklab_colour_picker/renderers.py"),
-    Path("oklab_colour_picker/selector_interaction.py"),
-    Path("oklab_colour_picker/selector_models.py"),
-    Path("oklab_colour_picker/models/__init__.py"),
-    Path("oklab_colour_picker/models/base.py"),
-    Path("oklab_colour_picker/models/geometry.py"),
-    Path("oklab_colour_picker/models/hue_lightness_slice.py"),
-    Path("oklab_colour_picker/models/lightness_chroma_slice.py"),
-    Path("oklab_colour_picker/models/lightness_slice.py"),
-}
-SET_FOREGROUND_ALLOWED = {
-    Path("oklab_colour_picker/controller.py"),
-    Path("oklab_colour_picker/krita_adapter.py"),
-}
-LOWER_LAYER_FILES = {
-    Path("oklab_colour_picker/colour_presentation.py"),
-    Path("oklab_colour_picker/colour_state.py"),
-    Path("oklab_colour_picker/color_math.py"),
-    Path("oklab_colour_picker/gamut_fallback.py"),
-    Path("oklab_colour_picker/renderers.py"),
-    Path("oklab_colour_picker/selector_interaction.py"),
-    Path("oklab_colour_picker/selector_models.py"),
-    Path("oklab_colour_picker/models/__init__.py"),
-    Path("oklab_colour_picker/models/base.py"),
-    Path("oklab_colour_picker/models/geometry.py"),
-    Path("oklab_colour_picker/models/hue_lightness_slice.py"),
-    Path("oklab_colour_picker/models/lightness_chroma_slice.py"),
-    Path("oklab_colour_picker/models/lightness_slice.py"),
-    Path("oklab_colour_picker/controller.py"),
-}
-UI_LAYER_MODULE_PREFIXES = (
-    "oklab_colour_picker.dock",
-    "oklab_colour_picker.plugin",
-    "oklab_colour_picker.widgets",
-)
 
 
 @dataclass(frozen=True)
@@ -147,6 +127,9 @@ def check_python_rules(sources: list[SourceFile]) -> int:
     errors = 0
     for source in python_sources(sources):
         rp = source.path
+        if not is_declared_package_module(rp):
+            fail(f"{rp}: Python modules must live in a declared package layer")
+            errors += 1
         try:
             tree = ast.parse(source.data, filename=source.posix)
             compile(tree, source.posix, "exec")
@@ -158,36 +141,38 @@ def check_python_rules(sources: list[SourceFile]) -> int:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 modules = [alias.name for alias in node.names]
-                if any(module == "krita" or module.startswith("krita.") for module in modules) and rp not in KRITA_ALLOWED:
+                if any(module == "krita" or module.startswith("krita.") for module in modules) and rp not in KRITA_IMPORT_ALLOWED:
                     fail(f"{rp}: Krita imports are only allowed in plugin/controller adapter files")
                     errors += 1
                 if any(module.startswith("legacy_plugin") for module in modules):
                     fail(f"{rp}: imports from legacy plugin are forbidden")
                     errors += 1
-                if rp in PURE_NO_QT and any(module.startswith(("PyQt5", "krita")) for module in modules):
-                    fail(f"{rp}: pure model/math modules must not import Qt or Krita")
+                if is_pure_layer_file(rp) and any(
+                    module.startswith(QT_OR_KRITA_MODULE_PREFIXES) for module in modules
+                ):
+                    fail(f"{rp}: pure domain/model/render modules must not import Qt or Krita")
                     errors += 1
-                if rp in LOWER_LAYER_FILES:
+                if is_lower_layer_file(rp):
                     for module in modules:
                         if starts_with_any(module, UI_LAYER_MODULE_PREFIXES):
-                            fail(f"{rp}: lower layers must not import widget/dock/plugin layers")
+                            fail(f"{rp}: lower layers must not import UI or plugin layers")
                             errors += 1
 
             if isinstance(node, ast.ImportFrom):
                 module = node.module or ""
-                if (module == "krita" or module.startswith("krita.")) and rp not in KRITA_ALLOWED:
+                if (module == "krita" or module.startswith("krita.")) and rp not in KRITA_IMPORT_ALLOWED:
                     fail(f"{rp}: Krita imports are only allowed in plugin/controller adapter files")
                     errors += 1
                 if module.startswith("legacy_plugin"):
                     fail(f"{rp}: imports from legacy plugin are forbidden")
                     errors += 1
-                if rp in PURE_NO_QT and module.startswith(("PyQt5", "krita")):
-                    fail(f"{rp}: pure model/math modules must not import Qt or Krita")
+                if is_pure_layer_file(rp) and module.startswith(QT_OR_KRITA_MODULE_PREFIXES):
+                    fail(f"{rp}: pure domain/model/render modules must not import Qt or Krita")
                     errors += 1
-                if rp in LOWER_LAYER_FILES:
-                    for imported_module in project_import_references(node, rp):
+                if is_lower_layer_file(rp):
+                    for imported_module in import_from_references(node, rp):
                         if starts_with_any(imported_module, UI_LAYER_MODULE_PREFIXES):
-                            fail(f"{rp}: lower layers must not import widget/dock/plugin layers")
+                            fail(f"{rp}: lower layers must not import UI or plugin layers")
                             errors += 1
 
             if not isinstance(node, ast.Call):
@@ -227,30 +212,6 @@ def check_formatting(sources: list[SourceFile]) -> int:
                 fail(f"{rp}:{line_no}: trailing whitespace is not allowed")
                 errors += 1
     return errors
-
-
-def project_import_references(node: ast.ImportFrom, source_path: Path) -> list[str]:
-    module = node.module or ""
-    if node.level:
-        base = ".".join(_relative_import_base(source_path, node.level))
-        resolved_module = ".".join(part for part in (base, module) if part)
-        if module:
-            return [resolved_module, *[f"{resolved_module}.{alias.name}" for alias in node.names]]
-        return [f"{base}.{alias.name}" for alias in node.names]
-    if module != "oklab_colour_picker":
-        return [module]
-    return [f"{module}.{alias.name}" for alias in node.names]
-
-
-def _relative_import_base(source_path: Path, level: int) -> tuple[str, ...]:
-    module_parts = source_path.with_suffix("").parts
-    package_parts = module_parts[:-1]
-    keep = max(0, len(package_parts) - level + 1)
-    return package_parts[:keep]
-
-
-def starts_with_any(module: str, prefixes: tuple[str, ...]) -> bool:
-    return any(module == prefix or module.startswith(f"{prefix}.") for prefix in prefixes)
 
 
 def run_pytest() -> int:

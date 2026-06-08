@@ -193,10 +193,6 @@ class State(ABC):
     kind: ClassVar[StateKind]
 
     @property
-    def name(self) -> str:
-        return self.kind.value
-
-    @property
     def anchor(self) -> Position | None:
         return None
 
@@ -394,27 +390,14 @@ def _begin_keyboard(ctx: Ctx, point: Point, colour: object) -> InteractionResult
 class SelectorInteraction:
     def __init__(self, initial: State | None = None) -> None:
         self._state = initial or Idle()
-        self._transition_log: list[StateKind] = [self._state.kind]
 
     @property
     def state_kind(self) -> StateKind:
         return self._state.kind
 
-    @property
-    def state_name(self) -> str:
-        return self._state.name
-
-    @property
-    def anchor(self) -> Position | None:
-        return self._state.anchor
-
-    @property
-    def transition_log(self) -> tuple[str, ...]:
-        return tuple(kind.value for kind in self._transition_log)
-
     def dispatch(self, ctx: Ctx, command: SelectorCommand) -> InteractionResult:
         result = command.dispatch(self._state, ctx)
-        self._adopt(result.state)
+        self._state = result.state
         return result
 
     def indicator(self, ctx: Ctx) -> Indicator:
@@ -425,12 +408,6 @@ class SelectorInteraction:
 
     def navigation_origin(self, ctx: Ctx, fallback: Position) -> Position | None:
         return self._state.navigation_origin(ctx, fallback)
-
-    def _adopt(self, state: State) -> None:
-        if state.kind is not self._state.kind:
-            self._transition_log.append(state.kind)
-        self._state = state
-
 
 @dataclass(frozen=True, slots=True)
 class DragSelection:

@@ -7,7 +7,7 @@ import os
 import sys
 from typing import Callable
 
-from oklab_colour_picker.dependency_bootstrap import install_numpy
+from oklab_colour_picker.infrastructure.dependency_bootstrap import install_numpy
 
 
 DOCK_FACTORY_ID = "oklab_colour_picker_dock"
@@ -55,7 +55,7 @@ def create_dock_widget_class(
             self._panel = None
 
             try:
-                from oklab_colour_picker.dock import ColourPickerDockPanel
+                from oklab_colour_picker.ui.dock import ColourPickerDockPanel
             except ImportError as exc:
                 if not _is_known_runtime_dependency(exc):
                     raise
@@ -208,8 +208,12 @@ def _build_missing_dependency_widget(
 
 
 def _create_controller():
-    from oklab_colour_picker.controller import ColourPickerController
-    from oklab_colour_picker.krita_adapter import KritaForegroundAdapter, QtForegroundTimer, QtSingleShotScheduler
+    from oklab_colour_picker.app.controller import ColourPickerController
+    from oklab_colour_picker.infrastructure.krita_adapter import (
+        KritaForegroundAdapter,
+        QtForegroundTimer,
+        QtSingleShotScheduler,
+    )
 
     return ColourPickerController(
         KritaForegroundAdapter(),
