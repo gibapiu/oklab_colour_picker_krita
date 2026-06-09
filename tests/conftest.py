@@ -4,9 +4,6 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
-# Keep the app's binding (OKLAB_QT_API, read by oklab_colour_picker.qt) and
-# pytest-qt's binding (PYTEST_QT_API) in lock-step. When both PyQt5 and PyQt6
-# are installed, a drift between them loads two bindings and the shim aborts.
 _OKLAB_TO_PYTEST_QT = {"PyQt5": "pyqt5", "PyQt6": "pyqt6"}
 _PYTEST_TO_OKLAB_QT = {value: key for key, value in _OKLAB_TO_PYTEST_QT.items()}
 

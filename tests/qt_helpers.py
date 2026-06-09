@@ -17,7 +17,6 @@ _MOUSE_TYPES = {
     "release": QtCore.QEvent.Type.MouseButtonRelease,
 }
 
-# (button that changed, buttons still held) for each gesture phase.
 _MOUSE_BUTTONS = {
     "press": (QtCore.Qt.MouseButton.LeftButton, QtCore.Qt.MouseButton.LeftButton),
     "move": (QtCore.Qt.MouseButton.NoButton, QtCore.Qt.MouseButton.LeftButton),

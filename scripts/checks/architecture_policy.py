@@ -68,7 +68,6 @@ UI_LAYER_MODULE_PREFIXES = (
     "oklab_colour_picker.ui",
 )
 
-# Lower layers (pure + app) must not reach the UI/plugin layers or the Qt shim.
 LOWER_LAYER_FORBIDDEN_MODULE_PREFIXES = (
     *UI_LAYER_MODULE_PREFIXES,
     QT_SHIM_MODULE,

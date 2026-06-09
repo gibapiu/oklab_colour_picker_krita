@@ -144,11 +144,12 @@ def test_install_numpy_falls_back_to_in_process_when_no_python_executable(tmp_pa
 
 
 def test_install_numpy_falls_back_to_in_process_when_sys_executable_version_mismatches(tmp_path, monkeypatch):
-    monkeypatch.setattr(dependency_bootstrap.sys, "executable", "/usr/bin/python3")
+    fake_executable = tmp_path / "krita-bin" / "python3"
+    monkeypatch.setattr(dependency_bootstrap.sys, "executable", str(fake_executable))
     monkeypatch.setattr(dependency_bootstrap, "_get_or_download_pip_wheel", lambda _vendor_path: PIP_WHEEL)
 
     def fake_run(args, **kwargs):
-        assert args[:3] == ["/usr/bin/python3", "-I", "-c"]
+        assert args[:3] == [str(fake_executable), "-I", "-c"]
         return _completed(args, returncode=0, stdout="3.14\n")
 
     monkeypatch.setattr(dependency_bootstrap.subprocess, "run", fake_run)

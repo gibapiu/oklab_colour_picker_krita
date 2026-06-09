@@ -96,12 +96,14 @@ def _load_first_available() -> dict[str, object]:
         try:
             return _load(candidate)
         except ImportError as exc:
-            if candidate in sys.modules:
-                # The package imported but a submodule failed: this binding is
-                # half-loaded, so falling back would mix bindings in-process.
+            if _partially_imported(candidate):
                 raise
             errors.append(f"{candidate}: {exc}")
     raise ImportError("No usable Qt binding: " + "; ".join(errors))
+
+
+def _partially_imported(api: str) -> bool:
+    return api in sys.modules
 
 
 def _forced_api() -> str | None:
