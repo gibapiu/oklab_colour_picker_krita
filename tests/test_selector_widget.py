@@ -2,10 +2,10 @@ import numpy as np
 import pytest
 
 pytest.importorskip("pytestqt")
-pytest.importorskip("PyQt5")
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from oklab_colour_picker.qt import QtCore, QtWidgets
 
+from tests.qt_helpers import focus_event, key_event, send_mouse
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.domain.colour_state import ColourIntent
 from oklab_colour_picker.models import (
@@ -46,9 +46,9 @@ def test_mouse_drag_emits_previews_and_commit(qtbot):
 
     start = QtCore.QPoint(8, 12)
     end = QtCore.QPoint(24, 16)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, start, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseMove, end, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, end, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", start)
+    send_mouse(widget, "move", end)
+    send_mouse(widget, "release", end)
 
     assert len(previews) >= 2
     assert len(commits) == 1
@@ -67,8 +67,8 @@ def test_cold_start_invalid_release_does_not_commit(qtbot):
     widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
 
     invalid_corner = QtCore.QPoint(0, 0)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, invalid_corner, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, invalid_corner, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", invalid_corner)
+    send_mouse(widget, "release", invalid_corner)
 
     assert commits == []
     assert previews and all(p is None for p in previews)
@@ -92,9 +92,9 @@ def test_warm_off_leaf_press_snaps_and_commits(qtbot):
     off_leaf = QtCore.QPoint(0, 0)
     expected = widget.model.snapped_color_at_position((off_leaf.x(), off_leaf.y()), _size(widget))
     assert expected is not None
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, off_leaf, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseMove, off_leaf, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, off_leaf, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", off_leaf)
+    send_mouse(widget, "move", off_leaf)
+    send_mouse(widget, "release", off_leaf)
 
     assert len(commits) == 1
     np.testing.assert_allclose(commits[0], expected)
@@ -123,10 +123,10 @@ def test_hue_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
     expected = widget.model.snapped_color_at_position((invalid_corner.x(), invalid_corner.y()), _size(widget))
     assert expected is not None
 
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, first_valid, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseMove, latest_valid, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseMove, invalid_corner, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, invalid_corner, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", first_valid)
+    send_mouse(widget, "move", latest_valid)
+    send_mouse(widget, "move", invalid_corner)
+    send_mouse(widget, "release", invalid_corner)
 
     # Invalid movement after a valid hit snaps to the nearest selectable
     # boundary, so the indicator keeps following the drag.
@@ -162,10 +162,10 @@ def test_lightness_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
     assert expected is not None
     assert widget.model.color_at_position((invalid_gamut.x(), invalid_gamut.y()), _size(widget)) is None
 
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, first_valid, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseMove, latest_valid, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseMove, invalid_gamut, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, invalid_gamut, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", first_valid)
+    send_mouse(widget, "move", latest_valid)
+    send_mouse(widget, "move", invalid_gamut)
+    send_mouse(widget, "release", invalid_gamut)
 
     # Invalid movement after a valid hit snaps to the gamut boundary.
     assert len(previews) == 3
@@ -191,9 +191,9 @@ def test_achromatic_hue_lightness_drag_outside_keeps_cursor_hue_anchor(qtbot):
     expected = snapped.paint_oklab
     expected_position = snapped.position
 
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, start, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseMove, outside, QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, outside, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", start)
+    send_mouse(widget, "move", outside)
+    send_mouse(widget, "release", outside)
 
     assert widget.indicator_position() == pytest.approx(expected_position, abs=1.0)
     np.testing.assert_allclose(widget.selected_colour, expected)
@@ -232,9 +232,9 @@ def test_snapped_colour_with_unresolvable_position_still_commits(qtbot):
     commits = []
     widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
 
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, QtCore.QPoint(1, 1), QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseMove, QtCore.QPoint(8, 1), QtCore.Qt.NoButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, QtCore.QPoint(8, 1), QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", QtCore.QPoint(1, 1))
+    send_mouse(widget, "move", QtCore.QPoint(8, 1))
+    send_mouse(widget, "release", QtCore.QPoint(8, 1))
 
     assert len(commits) == 1
     np.testing.assert_allclose(commits[0], UnresolvableSnapModel.SNAPPED)
@@ -252,14 +252,14 @@ def test_leave_during_drag_does_not_emit_invalid_preview(qtbot):
     widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
 
     point = QtCore.QPoint(24, 16)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, point, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    leave = QtCore.QEvent(QtCore.QEvent.Leave)
+    send_mouse(widget, "press", point)
+    leave = QtCore.QEvent(QtCore.QEvent.Type.Leave)
     QtWidgets.QApplication.sendEvent(widget, leave)
 
     assert len(previews) == 1
     assert previews[0] is not None
 
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, point, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "release", point)
 
 
 def test_programmatic_colour_update_blocks_widget_signals(qtbot):
@@ -298,8 +298,8 @@ def test_keyboard_nudge_previews_then_commits_on_release(qtbot):
     widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
     widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
 
-    press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
-    release = QtGui.QKeyEvent(QtCore.QEvent.KeyRelease, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    press = key_event("press", "Right")
+    release = key_event("release", "Right")
     QtWidgets.QApplication.sendEvent(widget, press)
 
     assert press.isAccepted()
@@ -322,8 +322,8 @@ def test_signal_payload_mutation_does_not_corrupt_widget_state(qtbot):
     widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
 
     point = QtCore.QPoint(24, 16)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, point, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, point, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", point)
+    send_mouse(widget, "release", point)
 
     selected = widget.selected_colour
     assert selected is not None
@@ -343,7 +343,7 @@ def test_keyboard_step_at_boundary_keeps_event_handled(qtbot):
     assert start is not None
     widget.set_selected_colour(_present(start))
 
-    event = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    event = key_event("press", "Right")
     QtWidgets.QApplication.sendEvent(widget, event)
 
     assert event.isAccepted()
@@ -363,15 +363,15 @@ def test_mouse_interaction_cancels_pending_keyboard_commit(qtbot):
     commits = []
     widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
 
-    key_press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    key_press = key_event("press", "Right")
     QtWidgets.QApplication.sendEvent(widget, key_press)
     assert key_press.isAccepted()
 
     point = QtCore.QPoint(24, 16)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, point, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, point, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", point)
+    send_mouse(widget, "release", point)
 
-    key_release = QtGui.QKeyEvent(QtCore.QEvent.KeyRelease, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    key_release = key_event("release", "Right")
     QtWidgets.QApplication.sendEvent(widget, key_release)
 
     assert len(commits) == 1
@@ -391,11 +391,11 @@ def test_focus_loss_flushes_pending_keyboard_commit(qtbot):
     commits = []
     widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
 
-    key_press = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Right, QtCore.Qt.NoModifier)
+    key_press = key_event("press", "Right")
     QtWidgets.QApplication.sendEvent(widget, key_press)
     assert key_press.isAccepted()
 
-    focus_out = QtGui.QFocusEvent(QtCore.QEvent.FocusOut)
+    focus_out = focus_event("out")
     QtWidgets.QApplication.sendEvent(widget, focus_out)
 
     assert len(commits) == 1
@@ -411,18 +411,6 @@ def test_pick_uses_selector_domain_snap():
     assert type(picked).__name__ == "SnappedPick"
     np.testing.assert_allclose(picked.colour.paint_oklab, UnresolvableSnapModel.SNAPPED)
     assert picked.position == pytest.approx((8.0, 3.0))
-
-
-def _send_mouse(widget, event_type, position, button, buttons):
-    event = QtGui.QMouseEvent(
-        event_type,
-        QtCore.QPointF(position),
-        button,
-        buttons,
-        QtCore.Qt.NoModifier,
-    )
-    QtWidgets.QApplication.sendEvent(widget, event)
-    assert event.isAccepted()
 
 
 def _size(widget):

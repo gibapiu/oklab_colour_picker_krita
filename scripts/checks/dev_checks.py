@@ -18,9 +18,11 @@ from pathlib import Path
 try:
     from scripts.checks.architecture_policy import (
         KRITA_IMPORT_ALLOWED,
+        LOWER_LAYER_FORBIDDEN_MODULE_PREFIXES,
+        QT_BINDING_IMPORT_ALLOWED,
+        QT_BINDING_MODULE_PREFIXES,
         QT_OR_KRITA_MODULE_PREFIXES,
         SET_FOREGROUND_ALLOWED,
-        UI_LAYER_MODULE_PREFIXES,
         import_from_references,
         is_declared_package_module,
         is_lower_layer_file,
@@ -30,9 +32,11 @@ try:
 except ModuleNotFoundError:
     from architecture_policy import (  # type: ignore[no-redef]
         KRITA_IMPORT_ALLOWED,
+        LOWER_LAYER_FORBIDDEN_MODULE_PREFIXES,
+        QT_BINDING_IMPORT_ALLOWED,
+        QT_BINDING_MODULE_PREFIXES,
         QT_OR_KRITA_MODULE_PREFIXES,
         SET_FOREGROUND_ALLOWED,
-        UI_LAYER_MODULE_PREFIXES,
         import_from_references,
         is_declared_package_module,
         is_lower_layer_file,
@@ -152,10 +156,16 @@ def check_python_rules(sources: list[SourceFile]) -> int:
                 ):
                     fail(f"{rp}: pure domain/model/render modules must not import Qt or Krita")
                     errors += 1
+                if (
+                    any(starts_with_any(module, QT_BINDING_MODULE_PREFIXES) for module in modules)
+                    and rp not in QT_BINDING_IMPORT_ALLOWED
+                ):
+                    fail(f"{rp}: Qt bindings may only be imported in the oklab_colour_picker.qt shim")
+                    errors += 1
                 if is_lower_layer_file(rp):
                     for module in modules:
-                        if starts_with_any(module, UI_LAYER_MODULE_PREFIXES):
-                            fail(f"{rp}: lower layers must not import UI or plugin layers")
+                        if starts_with_any(module, LOWER_LAYER_FORBIDDEN_MODULE_PREFIXES):
+                            fail(f"{rp}: lower layers must not import UI, plugin, or the Qt shim")
                             errors += 1
 
             if isinstance(node, ast.ImportFrom):
@@ -169,10 +179,16 @@ def check_python_rules(sources: list[SourceFile]) -> int:
                 if is_pure_layer_file(rp) and module.startswith(QT_OR_KRITA_MODULE_PREFIXES):
                     fail(f"{rp}: pure domain/model/render modules must not import Qt or Krita")
                     errors += 1
+                if (
+                    starts_with_any(module, QT_BINDING_MODULE_PREFIXES)
+                    and rp not in QT_BINDING_IMPORT_ALLOWED
+                ):
+                    fail(f"{rp}: Qt bindings may only be imported in the oklab_colour_picker.qt shim")
+                    errors += 1
                 if is_lower_layer_file(rp):
                     for imported_module in import_from_references(node, rp):
-                        if starts_with_any(imported_module, UI_LAYER_MODULE_PREFIXES):
-                            fail(f"{rp}: lower layers must not import UI or plugin layers")
+                        if starts_with_any(imported_module, LOWER_LAYER_FORBIDDEN_MODULE_PREFIXES):
+                            fail(f"{rp}: lower layers must not import UI, plugin, or the Qt shim")
                             errors += 1
 
             if not isinstance(node, ast.Call):

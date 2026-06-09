@@ -1,7 +1,6 @@
 import pytest
 
 pytest.importorskip("pytestqt")
-pytest.importorskip("PyQt5")
 
 from oklab_colour_picker.infrastructure.krita_adapter import (
     FOREGROUND_POLL_INTERVAL_MS,

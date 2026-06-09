@@ -4,10 +4,10 @@ import numpy as np
 import pytest
 
 pytest.importorskip("pytestqt")
-pytest.importorskip("PyQt5")
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from oklab_colour_picker.qt import QtCore, QtGui
 
+from tests.qt_helpers import send_mouse
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.domain.colour_presentation import ColourPresenter
 from oklab_colour_picker.domain.colour_state import ColourIntent
@@ -160,8 +160,8 @@ def test_absorbed_echo_with_model_swap_preserves_intent_lch(qtbot):
     qtbot.addWidget(widget)
     widget.show()
     click = QtCore.QPoint(60, 30)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, click, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, click, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", click)
+    send_mouse(widget, "release", click)
 
     assert widget.colour is not None
     lightness, _chroma, hue = widget.colour.selector_lch
@@ -195,12 +195,7 @@ def test_invalid_press_on_warm_idle_is_a_no_op(qtbot):
     assert rings_before
     widget.set_model(InvalidPickModel(widget.model))
 
-    _send_mouse(
-        widget,
-        QtCore.QEvent.MouseButtonPress,
-        QtCore.QPoint(60, 60),
-        QtCore.Qt.LeftButton,
-    )
+    send_mouse(widget, "press", QtCore.QPoint(60, 60))
 
     assert widget.model_indicator().rings == rings_before
 
@@ -221,7 +216,7 @@ def test_tiny_widget_size_does_not_raise(model, qtbot):
     widget.set_selected_colour(presented_colour(np.array([0.5, 0.0, 0.0])))
 
     assert widget.indicator_position() is None
-    image = QtGui.QImage(QtCore.QSize(1, 1), QtGui.QImage.Format_RGBA8888)
+    image = QtGui.QImage(QtCore.QSize(1, 1), QtGui.QImage.Format.Format_RGBA8888)
     painter = QtGui.QPainter(image)
     widget.render(painter)
     painter.end()
@@ -233,8 +228,8 @@ def test_paint_event_renders_selector_image(qtbot):
     qtbot.addWidget(widget)
     widget.show()
 
-    image = QtGui.QImage(widget.size(), QtGui.QImage.Format_RGBA8888)
-    image.fill(QtCore.Qt.transparent)
+    image = QtGui.QImage(widget.size(), QtGui.QImage.Format.Format_RGBA8888)
+    image.fill(QtCore.Qt.GlobalColor.transparent)
     painter = QtGui.QPainter(image)
     widget.render(painter)
     painter.end()
@@ -244,18 +239,6 @@ def test_paint_event_renders_selector_image(qtbot):
         for y in range(image.height())
         for x in range(image.width())
     )
-
-
-def _send_mouse(widget, event_type, position, buttons):
-    event = QtGui.QMouseEvent(
-        event_type,
-        QtCore.QPointF(position),
-        QtCore.Qt.LeftButton,
-        buttons,
-        QtCore.Qt.NoModifier,
-    )
-    QtWidgets.QApplication.sendEvent(widget, event)
-    assert event.isAccepted()
 
 
 def _size(widget):

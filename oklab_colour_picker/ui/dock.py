@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Callable, Protocol, Sequence
 
 import numpy as np
-from PyQt5 import QtCore, QtWidgets
+from oklab_colour_picker.qt import QtCore, QtWidgets
 
 from oklab_colour_picker.app.selector_model_cache import (
     SelectorMode,

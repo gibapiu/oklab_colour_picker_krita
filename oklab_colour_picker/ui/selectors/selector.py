@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 import numpy as np
-from PyQt5 import QtCore, QtGui, QtWidgets
+from oklab_colour_picker.qt import QtCore, QtGui, QtWidgets, event_xy
 
 from oklab_colour_picker.domain import selector_interaction
 from oklab_colour_picker.domain.colour_presentation import (
@@ -70,9 +70,12 @@ class SelectorWidget(QtWidgets.QWidget):
         self._image_cache_key: tuple[SelectorModel, int, int] | None = None
         self._image_cache_buffer: np.ndarray | None = None
         self._image_cache: QtGui.QImage | None = None
-        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(32, 32)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
 
     def _dispatch(
         self, command: selector_interaction.SelectorCommand
@@ -217,10 +220,10 @@ class SelectorWidget(QtWidgets.QWidget):
     # -- Qt event plumbing (input routing only) -----------------------
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() != QtCore.Qt.LeftButton:
+        if event.button() != QtCore.Qt.MouseButton.LeftButton:
             event.ignore()
             return
-        self.setFocus(QtCore.Qt.MouseFocusReason)
+        self.setFocus(QtCore.Qt.FocusReason.MouseFocusReason)
         self._dispatch(selector_interaction.PointerPress(_point(event)))
         event.accept()
 
@@ -232,7 +235,7 @@ class SelectorWidget(QtWidgets.QWidget):
         event.accept()
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
-        if event.button() != QtCore.Qt.LeftButton:
+        if event.button() != QtCore.Qt.MouseButton.LeftButton:
             event.ignore()
             return
         result = self._dispatch(selector_interaction.PointerRelease(_point(event)))
@@ -303,14 +306,17 @@ class SelectorWidget(QtWidgets.QWidget):
         indicator = self._interaction.indicator(self)
         if not indicator.rings:
             return
-        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        painter.setBrush(QtCore.Qt.NoBrush)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         for ring in indicator.rings:
             self._stroke_circle(painter, ring.position, solid=ring.solid)
 
     def _stroke_circle(self, painter: QtGui.QPainter, position: tuple[float, float], *, solid: bool) -> None:
         center = QtCore.QPointF(position[0], position[1])
-        for colour, width in ((QtCore.Qt.black, 3.0), (QtCore.Qt.white, 1.5)):
+        for colour, width in (
+            (QtCore.Qt.GlobalColor.black, 3.0),
+            (QtCore.Qt.GlobalColor.white, 1.5),
+        ):
             painter.setPen(_ring_pen(colour, width, solid=solid))
             painter.drawEllipse(center, 5.0, 5.0)
 
@@ -325,7 +331,7 @@ class SelectorWidget(QtWidgets.QWidget):
             self.width(),
             self.height(),
             bytes_per_line,
-            QtGui.QImage.Format_RGBA8888,
+            QtGui.QImage.Format.Format_RGBA8888,
         )
         self._image_cache_key = key
         self._image_cache_buffer = rgba
@@ -352,14 +358,14 @@ class SelectorWidget(QtWidgets.QWidget):
         step = _keyboard_step(self.size(), event.modifiers())
         key = event.key()
         target_deltas = {
-            QtCore.Qt.Key_Left: (-step, 0.0),
-            QtCore.Qt.Key_Right: (step, 0.0),
-            QtCore.Qt.Key_Up: (0.0, -step),
-            QtCore.Qt.Key_Down: (0.0, step),
-            QtCore.Qt.Key_Home: (-x, 0.0),
-            QtCore.Qt.Key_End: (self.width() - 1.0 - x, 0.0),
-            QtCore.Qt.Key_PageUp: (0.0, -y),
-            QtCore.Qt.Key_PageDown: (0.0, self.height() - 1.0 - y),
+            QtCore.Qt.Key.Key_Left: (-step, 0.0),
+            QtCore.Qt.Key.Key_Right: (step, 0.0),
+            QtCore.Qt.Key.Key_Up: (0.0, -step),
+            QtCore.Qt.Key.Key_Down: (0.0, step),
+            QtCore.Qt.Key.Key_Home: (-x, 0.0),
+            QtCore.Qt.Key.Key_End: (self.width() - 1.0 - x, 0.0),
+            QtCore.Qt.Key.Key_PageUp: (0.0, -y),
+            QtCore.Qt.Key.Key_PageDown: (0.0, self.height() - 1.0 - y),
         }
         if key in target_deltas:
             return self._nearest_valid_point(position, *target_deltas[key])
@@ -382,14 +388,14 @@ class SelectorWidget(QtWidgets.QWidget):
 
     def _is_keyboard_navigation_key(self, key: int) -> bool:
         return key in {
-            QtCore.Qt.Key_Left,
-            QtCore.Qt.Key_Right,
-            QtCore.Qt.Key_Up,
-            QtCore.Qt.Key_Down,
-            QtCore.Qt.Key_Home,
-            QtCore.Qt.Key_End,
-            QtCore.Qt.Key_PageUp,
-            QtCore.Qt.Key_PageDown,
+            QtCore.Qt.Key.Key_Left,
+            QtCore.Qt.Key.Key_Right,
+            QtCore.Qt.Key.Key_Up,
+            QtCore.Qt.Key.Key_Down,
+            QtCore.Qt.Key.Key_Home,
+            QtCore.Qt.Key.Key_End,
+            QtCore.Qt.Key.Key_PageUp,
+            QtCore.Qt.Key.Key_PageDown,
         }
 
 
@@ -398,13 +404,13 @@ def _widget_size(widget: QtWidgets.QWidget) -> tuple[int, int]:
 
 
 def _point(event: QtGui.QMouseEvent) -> tuple[float, float]:
-    return float(event.pos().x()), float(event.pos().y())
+    return event_xy(event)
 
 
 def _ring_pen(colour: QtCore.Qt.GlobalColor, width: float, *, solid: bool) -> QtGui.QPen:
     pen = QtGui.QPen(colour, width)
     if not solid:
-        pen.setStyle(QtCore.Qt.DashLine)
+        pen.setStyle(QtCore.Qt.PenStyle.DashLine)
         pen.setDashPattern([2.0, 2.0])
     return pen
 
@@ -424,9 +430,9 @@ def _emit_payload(colour: ColourIntent | np.ndarray | Sequence[float] | None) ->
 
 
 def _keyboard_step(size: QtCore.QSize, modifiers: QtCore.Qt.KeyboardModifiers) -> int:
-    if modifiers & QtCore.Qt.ShiftModifier:
+    if modifiers & QtCore.Qt.KeyboardModifier.ShiftModifier:
         return 1
     base = max(1, min(size.width(), size.height()) // 64)
-    if modifiers & QtCore.Qt.ControlModifier:
+    if modifiers & QtCore.Qt.KeyboardModifier.ControlModifier:
         return max(1, base * 4)
     return base

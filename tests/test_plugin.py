@@ -4,9 +4,8 @@ import types
 import pytest
 
 pytest.importorskip("pytestqt")
-pytest.importorskip("PyQt5")
 
-from PyQt5 import QtCore, QtWidgets
+from oklab_colour_picker.qt import QtCore, QtWidgets
 
 import oklab_colour_picker
 import oklab_colour_picker.plugin as plugin_module
@@ -104,7 +103,7 @@ def test_install_action_requires_confirmation(qtbot, monkeypatch, tmp_path):
 
     def reject_install(_parent, _title, message, *args, **kwargs):
         messages.append(message)
-        return QtWidgets.QMessageBox.No
+        return QtWidgets.QMessageBox.StandardButton.No
 
     monkeypatch.setattr(QtWidgets.QMessageBox, "question", reject_install)
     dock = create_dock_widget_class(
@@ -114,7 +113,7 @@ def test_install_action_requires_confirmation(qtbot, monkeypatch, tmp_path):
     )()
     qtbot.addWidget(dock)
 
-    qtbot.mouseClick(_install_button(dock.widget()), QtCore.Qt.LeftButton)
+    qtbot.mouseClick(_install_button(dock.widget()), QtCore.Qt.MouseButton.LeftButton)
 
     assert installer_calls == []
     assert messages
@@ -127,12 +126,12 @@ def test_confirmed_install_runs_installer(qtbot, monkeypatch, tmp_path):
     monkeypatch.setattr(
         QtWidgets.QMessageBox,
         "question",
-        lambda *args, **kwargs: QtWidgets.QMessageBox.Yes,
+        lambda *args, **kwargs: QtWidgets.QMessageBox.StandardButton.Yes,
     )
     monkeypatch.setattr(
         QtWidgets.QMessageBox,
         "information",
-        lambda *args, **kwargs: QtWidgets.QMessageBox.Ok,
+        lambda *args, **kwargs: QtWidgets.QMessageBox.StandardButton.Ok,
     )
     installer_calls = []
 
@@ -149,7 +148,7 @@ def test_confirmed_install_runs_installer(qtbot, monkeypatch, tmp_path):
     status = dock.widget().findChild(QtWidgets.QLabel, "oklab-install-status")
     button = _install_button(dock.widget())
 
-    qtbot.mouseClick(button, QtCore.Qt.LeftButton)
+    qtbot.mouseClick(button, QtCore.Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(
         lambda: bool(installer_calls) and "installed" in status.text().lower(),
@@ -164,14 +163,14 @@ def test_install_exception_is_reported(qtbot, monkeypatch, tmp_path):
     monkeypatch.setattr(
         QtWidgets.QMessageBox,
         "question",
-        lambda *args, **kwargs: QtWidgets.QMessageBox.Yes,
+        lambda *args, **kwargs: QtWidgets.QMessageBox.StandardButton.Yes,
     )
     warnings = []
     monkeypatch.setattr(
         QtWidgets.QMessageBox,
         "warning",
         lambda _parent, _title, message, *args, **kwargs: (
-            warnings.append(message) or QtWidgets.QMessageBox.Ok
+            warnings.append(message) or QtWidgets.QMessageBox.StandardButton.Ok
         ),
     )
 
@@ -186,7 +185,7 @@ def test_install_exception_is_reported(qtbot, monkeypatch, tmp_path):
     qtbot.addWidget(dock)
     button = _install_button(dock.widget())
 
-    qtbot.mouseClick(button, QtCore.Qt.LeftButton)
+    qtbot.mouseClick(button, QtCore.Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(lambda: bool(warnings), timeout=5000)
     assert "network is down" in warnings[0]

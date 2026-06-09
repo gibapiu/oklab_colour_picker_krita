@@ -2,10 +2,10 @@ import numpy as np
 import pytest
 
 pytest.importorskip("pytestqt")
-pytest.importorskip("PyQt5")
 
-from PyQt5 import QtCore, QtGui
+from oklab_colour_picker.qt import QtCore, QtGui
 
+from tests.qt_helpers import send_mouse
 from oklab_colour_picker.models import HueLightnessSliceModel
 from oklab_colour_picker.ui.selectors import HueLightnessSliceDiskWidget
 from oklab_colour_picker.domain.colour_state import ColourIntent
@@ -31,8 +31,8 @@ def test_disk_widget_picks_through_lightness_overlay(qtbot):
     widget.committed.connect(lambda c, _cs=commits: _cs.append(_paint_of(c)))
 
     pos = QtCore.QPoint(75, 60)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, pos, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, pos, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", pos)
+    send_mouse(widget, "release", pos)
 
     expected = widget.model.color_at_position((pos.x(), pos.y()), (widget.width(), widget.height()))
     assert expected is not None
@@ -82,8 +82,8 @@ def test_disk_widget_indicator_follows_click_on_achromatic_slice(qtbot):
     widget.show()
 
     pos = QtCore.QPoint(60, 20)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, pos, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, pos, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", pos)
+    send_mouse(widget, "release", pos)
 
     indicator = widget.indicator_position()
     assert indicator is not None
@@ -100,8 +100,8 @@ def test_disk_widget_drops_achromatic_override_after_resize(qtbot):
     widget.show()
 
     pos = QtCore.QPoint(60, 20)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonPress, pos, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(widget, QtCore.QEvent.MouseButtonRelease, pos, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(widget, "press", pos)
+    send_mouse(widget, "release", pos)
     assert widget.indicator_position() == pytest.approx((float(pos.x()), float(pos.y())))
 
     widget.resize(201, 201)
@@ -113,19 +113,13 @@ def test_disk_widget_drops_achromatic_override_after_resize(qtbot):
 
 
 def _render_to_rgba_array(widget) -> np.ndarray:
-    image = QtGui.QImage(widget.size(), QtGui.QImage.Format_ARGB32)
+    image = QtGui.QImage(widget.size(), QtGui.QImage.Format.Format_ARGB32)
     image.fill(0)
     widget.render(image)
     ptr = image.bits()
-    ptr.setsize(image.byteCount())
+    ptr.setsize(image.sizeInBytes())
     raw = np.frombuffer(ptr, dtype=np.uint8).reshape(image.height(), image.width(), 4).copy()
     return np.dstack((raw[..., 2], raw[..., 1], raw[..., 0], raw[..., 3]))
-
-
-def _send_mouse(widget, event_type, pos, button, buttons):
-    event = QtGui.QMouseEvent(event_type, pos, button, buttons, QtCore.Qt.NoModifier)
-    QtCore.QCoreApplication.sendEvent(widget, event)
-    assert event.isAccepted()
 
 
 def _paint_of(c):

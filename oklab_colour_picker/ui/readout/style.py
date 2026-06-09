@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt5 import QtGui
+from oklab_colour_picker.qt import QtGui
 
 
 DARK_INK = QtGui.QColor("#1e1e1e")

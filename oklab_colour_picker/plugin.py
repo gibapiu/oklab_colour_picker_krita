@@ -31,6 +31,7 @@ def register_plugin(*, krita_instance=None, api: KritaApi | None = None) -> bool
         return False
 
     app = krita_instance if krita_instance is not None else krita_api.Krita.instance()
+    _seed_qt_binding(krita_api, app)
     app_data_location = _app_data_location(app)
     _add_vendor_site_packages(app_data_location)
     dock_class = create_dock_widget_class(krita_api.DockWidget, app_data_location=app_data_location)
@@ -81,6 +82,36 @@ def create_dock_widget_class(
     return OKLabColourPickerDock
 
 
+def _seed_qt_binding(krita_api: KritaApi, app) -> None:
+    """Pin the Qt binding to Krita's runtime version before any UI import."""
+
+    from oklab_colour_picker import qt
+
+    qt.select_binding(_krita_qt_version(krita_api, app))
+
+
+def _krita_qt_version(krita_api: KritaApi, app) -> str | None:
+    for source in (_krita_module(), krita_api.Krita, app):
+        getter = getattr(source, "qVersion", None)
+        if not callable(getter):
+            continue
+        try:
+            version = getter()
+        except Exception:
+            continue
+        if version:
+            return str(version)
+    return None
+
+
+def _krita_module():
+    try:
+        import krita
+    except ImportError:
+        return None
+    return krita
+
+
 _KNOWN_RUNTIME_DEPENDENCIES = frozenset({"numpy"})
 
 
@@ -127,7 +158,7 @@ def _build_missing_dependency_widget(
     vendor_path: str,
     dependency_installer: Callable[[str], object],
 ):
-    from PyQt5 import QtCore, QtWidgets
+    from oklab_colour_picker.qt import QtCore, QtWidgets
 
     missing = error.name or str(error)
     widget = QtWidgets.QWidget()
@@ -141,16 +172,16 @@ def _build_missing_dependency_widget(
         f"OKLab Colour Selector could not start because Python dependency '{missing}' is missing.\n\n"
         "Krita does not always ship NumPy. You can install NumPy into Krita's app data, then restart Krita."
     )
-    label.setAlignment(QtCore.Qt.AlignCenter)
+    label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
     label.setWordWrap(True)
     layout.addWidget(label)
 
     button = QtWidgets.QPushButton("Install NumPy")
     button.setObjectName("oklab-install-numpy")
-    layout.addWidget(button, alignment=QtCore.Qt.AlignCenter)
+    layout.addWidget(button, alignment=QtCore.Qt.AlignmentFlag.AlignCenter)
 
     status = QtWidgets.QLabel("")
-    status.setAlignment(QtCore.Qt.AlignCenter)
+    status.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
     status.setWordWrap(True)
     status.setObjectName("oklab-install-status")
     layout.addWidget(status)
@@ -193,10 +224,10 @@ def _build_missing_dependency_widget(
             "Install NumPy for OKLab Colour Selector?\n\n"
             "Krita will download NumPy from PyPI and install it into the plugin's private dependency folder.\n\n"
             "Restart Krita after installation.",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-            QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.No,
         )
-        if response != QtWidgets.QMessageBox.Yes:
+        if response != QtWidgets.QMessageBox.StandardButton.Yes:
             return
 
         button.setEnabled(False)
