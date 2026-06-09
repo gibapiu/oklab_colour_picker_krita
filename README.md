@@ -64,5 +64,3 @@ Short walkthrough: [docs/usage.md](docs/usage.md).
 Most issues are missing NumPy or a `.desktop` file in the wrong folder. See [docs/troubleshooting.md](docs/troubleshooting.md) for more details to to fix it.
 
 Spot a bug or have a suggestion? Open [an Issue](https://github.com/gibapiu/oklab_colour_picker_krita/issues) and stay tuned!
-
-

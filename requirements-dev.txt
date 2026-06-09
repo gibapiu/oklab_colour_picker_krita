@@ -1,5 +1,5 @@
-# Default dev install targets the Krita 5 binding (PyQt5). 
-# To exercise the Krita 6 binding, run the per-binding matrix with `tox` (see tox.ini), 
+# Default dev install targets the Krita 5 binding (PyQt5).
+# To exercise the Krita 6 binding, run the per-binding matrix with `tox` (see tox.ini),
 # which installs PyQt6 in its own env so a single process never loads both.
 numpy>=1.26,<3
 PyQt5>=5.15,<6
