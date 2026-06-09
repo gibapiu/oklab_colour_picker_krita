@@ -1,0 +1,38 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Static architecture checks
+        run: python scripts/checks/dev_checks.py --scope tracked
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        binding: [pyqt5, pyqt6]   # Krita 5 (PyQt5) and Krita 6/7 (PyQt6)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install headless Qt system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon0
+      - name: Install tox
+        run: python -m pip install "tox>=4,<5"
+      - name: Run ${{ matrix.binding }} suite
+        run: python -m tox -e ${{ matrix.binding }}
