@@ -14,4 +14,4 @@ if [ ! -x "$CHECK_SCRIPT" ]; then
   exit 1
 fi
 
-"$PYTHON_BIN" "$CHECK_SCRIPT" --scope staged
+"$PYTHON_BIN" "$CHECK_SCRIPT" --scope staged --fix

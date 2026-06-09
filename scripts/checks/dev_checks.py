@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import argparse
 import ast
+import importlib.util
 import os
+import shutil
+import stat
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -48,6 +51,18 @@ except ModuleNotFoundError:
 ROOT = Path(__file__).resolve().parents[2]
 LEGACY_PREFIX = "legacy-plugin/"
 
+# Whitespace fixes/checks apply only to regular files known to be text.
+# Symlinks (120000) and gitlinks (160000) carry no rewriteable text and excluded from check.
+REGULAR_FILE_MODES = frozenset({"100644", "100755"})
+TEXT_SUFFIXES = frozenset({
+    ".py", ".pyi", ".md", ".rst", ".txt", ".ini", ".cfg", ".toml",
+    ".yml", ".yaml", ".json", ".html", ".css", ".js", ".sh", ".desktop",
+})
+TEXT_FILENAMES = frozenset({
+    "LICENSE", ".gitignore", ".gitattributes", ".editorconfig",
+    "pre-commit", "pre-push",
+})
+
 
 @dataclass(frozen=True)
 class SourceFile:
@@ -55,6 +70,7 @@ class SourceFile:
 
     path: Path
     data: bytes
+    mode: str
 
     @property
     def suffix(self) -> str:
@@ -76,6 +92,23 @@ class SourceFile:
     def is_binary(self) -> bool:
         return b"\0" in self.data
 
+    @property
+    def is_regular(self) -> bool:
+        return self.mode in REGULAR_FILE_MODES
+
+    @property
+    def is_text(self) -> bool:
+        """True only for regular files whose name and contents are safe to rewrite as text."""
+        if not self.is_regular or self.is_binary:
+            return False
+        if self.suffix not in TEXT_SUFFIXES and self.path.name not in TEXT_FILENAMES:
+            return False
+        try:
+            self.data.decode("utf-8")
+        except UnicodeDecodeError:
+            return False
+        return True
+
 
 def run_git(args: list[str]) -> str:
     return subprocess.check_output(["git", *args], cwd=ROOT, text=True)
@@ -94,18 +127,38 @@ def staged_paths() -> list[Path]:
     return [Path(line) for line in lines if line]
 
 
+def staged_modes() -> dict[str, str]:
+    modes = {}
+    for line in run_git(["ls-files", "-s"]).splitlines():
+        meta, _, path = line.partition("\t")
+        if path:
+            modes[path] = meta.split()[0]
+    return modes
+
+
+def tracked_mode(full_path: Path) -> str:
+    st = full_path.lstat()
+    if stat.S_ISLNK(st.st_mode):
+        return "120000"
+    return "100755" if st.st_mode & 0o111 else "100644"
+
+
 def source_files(scope: str) -> list[SourceFile]:
     sources = []
-    paths = staged_paths() if scope == "staged" else tracked_paths()
-    for path in paths:
-        if scope == "staged":
-            data = git_blob(path)
-        else:
+    if scope == "staged":
+        modes = staged_modes()
+        for path in staged_paths():
+            sources.append(
+                SourceFile(path=path, data=git_blob(path), mode=modes.get(path.as_posix(), "100644"))
+            )
+    else:
+        for path in tracked_paths():
             full_path = ROOT / path
             if not full_path.is_file():
                 continue
-            data = full_path.read_bytes()
-        sources.append(SourceFile(path=path, data=data))
+            sources.append(
+                SourceFile(path=path, data=full_path.read_bytes(), mode=tracked_mode(full_path))
+            )
     return sources
 
 
@@ -213,7 +266,7 @@ def check_python_rules(sources: list[SourceFile]) -> int:
 def check_formatting(sources: list[SourceFile]) -> int:
     errors = 0
     for source in sources:
-        if source.is_binary:
+        if not source.is_text:
             continue
         data = source.data
         rp = source.path
@@ -230,12 +283,70 @@ def check_formatting(sources: list[SourceFile]) -> int:
     return errors
 
 
-def run_pytest() -> int:
+def normalize_bytes(data: bytes) -> bytes:
+    """Return data with CRLF normalized, trailing whitespace stripped, and a single final newline."""
+    text = data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    lines = [line.rstrip(b" \t") for line in text.split(b"\n")]
+    fixed = b"\n".join(lines).rstrip(b"\n")
+    return fixed + b"\n" if fixed else fixed
+
+
+def restage_blob(path: Path, data: bytes, mode: str) -> None:
+    proc = subprocess.run(
+        ["git", "hash-object", "-w", "--path", path.as_posix(), "--stdin"],
+        input=data,
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        check=True,
+    )
+    sha = proc.stdout.decode().strip()
+    subprocess.check_call(
+        ["git", "update-index", "--cacheinfo", f"{mode},{sha},{path.as_posix()}"],
+        cwd=ROOT,
+    )
+
+
+def autofix_formatting(sources: list[SourceFile], scope: str) -> list[str]:
+    """Apply whitespace/newline fixes to regular text files; return the paths that changed.
+    Only files reported as text are touched, so symlinks and binary blobs are left intact
+    """
+    fixed = []
+    for source in sources:
+        if not source.is_text:
+            continue
+        new = normalize_bytes(source.data)
+        if new == source.data:
+            continue
+        full_path = ROOT / source.path
+        if scope == "staged":
+            restage_blob(source.path, new, source.mode)
+            if full_path.is_file() and full_path.read_bytes() == source.data:
+                full_path.write_bytes(new)
+        else:
+            full_path.write_bytes(new)
+        fixed.append(source.posix)
+    return fixed
+
+
+def tests_command() -> list[str]:
+    """Return the lean test command, preferring the tox matrix for full CI parity."""
+    lean = ["-q", "--no-header", "--tb=short", "--disable-warnings"]
+    if importlib.util.find_spec("tox") is not None:
+        return [sys.executable, "-m", "tox", "-q", "-e", "pyqt5,pyqt6", "--", *lean]
+    if shutil.which("tox") is not None:
+        return ["tox", "-q", "-e", "pyqt5,pyqt6", "--", *lean]
+    print("WARNING: tox not found; running single-binding pytest only (perf included). "
+          "CI also checks the other Qt binding -- install requirements-dev.txt for full parity.",
+          file=sys.stderr)
+    return [sys.executable, "-m", "pytest", *lean]
+
+
+def run_tests() -> int:
     tests_dir = ROOT / "tests"
     if not tests_dir.exists():
-        print("No tests/ directory yet; skipping pytest.")
+        print("No tests/ directory yet; skipping tests.")
         return 0
-    return subprocess.call([sys.executable, "-m", "pytest"], cwd=ROOT)
+    return subprocess.call(tests_command(), cwd=ROOT)
 
 
 def install_hooks() -> int:
@@ -247,7 +358,8 @@ def install_hooks() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--scope", choices=("tracked", "staged"), default="tracked")
-    parser.add_argument("--pytest", action="store_true", help="Run pytest after static checks.")
+    parser.add_argument("--fix", action="store_true", help="Auto-fix whitespace/newline issues before checking.")
+    parser.add_argument("--pytest", action="store_true", help="Run the lean test suite after static checks.")
     parser.add_argument("--install-hooks", action="store_true", help="Set core.hooksPath=.githooks.")
     args = parser.parse_args()
 
@@ -256,12 +368,24 @@ def main() -> int:
 
     os.chdir(ROOT)
     sources = source_files(args.scope)
+    fixed = []
+    if args.fix:
+        fixed = autofix_formatting(sources, args.scope)
+        if fixed:
+            print(f"auto-fixed formatting in {len(fixed)} file(s):")
+            for path in fixed:
+                print(f"  {path}")
+            sources = source_files(args.scope)
     errors = 0
     errors += check_no_legacy(sources)
     errors += check_formatting(sources)
     errors += check_python_rules(sources)
     if args.pytest:
-        errors += run_pytest()
+        errors += run_tests()
+    if fixed:
+        # Re-staging the fixes changed the index, so abort and require an explicit review + re-commit.
+        fail("auto-fixes were applied and staged; review them (git diff --cached) and re-run the commit.")
+        return 1
     return 1 if errors else 0
 
 
