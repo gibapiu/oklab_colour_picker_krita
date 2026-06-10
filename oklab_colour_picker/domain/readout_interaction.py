@@ -52,9 +52,8 @@ class ReadoutResult:
 class ReadoutSession:
     """State machine for readout broadcasts and edit latching.
 
-    The Qt widget owns the controls. This object owns only view interaction
-    state: current/previous presented colours, the active edit latch, and the
-    draft intent used to identify the controller echo of an in-flight preview.
+    Owns only view interaction state: current/previous presented colours, the active edit latch,
+    and the draft intent used to identify the controller echo of an in-flight preview.
     """
 
     def __init__(self) -> None:

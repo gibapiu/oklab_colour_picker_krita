@@ -1,6 +1,6 @@
 """Pure, Qt-free interaction state machine for the selector view.
 
-States are *objects* (GoF State pattern): each one owns its data, answers its
+States are *objects*: each one owns its data, answers its
 own questions (``anchor``, ``broadcast``, ``indicator``) and returns typed
 interaction results. There is no conditional dispatch on a state tag and no
 ad-hoc "anchored" / "in-flight" state groups — those questions are answered
@@ -12,8 +12,8 @@ whole machine is unit-testable against a plain fake ``Ctx`` (see
 adapter: it translates Qt events into state calls and renders what the state
 reports.
 
-``Ctx`` is the narrow port the widget implements. Colours are opaque to this
-module; copying/quantization are the widget's responsibility through ``Ctx``.
+``Ctx`` is the narrow port the widget implements.
+Colours are opaque to this module; copying/quantization are the widget's responsibility through ``Ctx``.
 """
 
 from __future__ import annotations
@@ -187,8 +187,8 @@ class InteractionResult:
 
 
 class State(ABC):
-    """Base state. Every event defaults to a no-op self-transition, so each
-    concrete state only overrides the events it actually handles."""
+    """Base state. Every event defaults to a no-op self-transition,
+    so each concrete state only overrides the events it actually handles."""
 
     kind: ClassVar[StateKind]
 
@@ -255,8 +255,6 @@ class Idle(State):
     kind: ClassVar[StateKind] = StateKind.IDLE
 
     def broadcast(self, ctx: Ctx, colour: object | None) -> InteractionResult:
-        # The controller currently broadcasts only concrete colours; accepting
-        # None keeps direct/programmatic clears well-defined for the facade.
         ctx.set_colour(colour)
         return InteractionResult(self, rendered_broadcast=True)
 
@@ -427,8 +425,8 @@ def _drag_selection(
         case SnappedPick(colour=colour, position=position) if has_last_valid:
             return DragSelection(colour, position)
         case InvalidPick() | SnappedPick():
-            # Snapping starts only after a drag has first owned a valid colour;
-            # an off-gamut press stays cancellable and restores the prior state.
+            # Snapping starts only after a drag has first owned a valid colour.
+            # An off-gamut press stays cancellable and restores the prior state.
             return None
 
 def _position(point: Point) -> Position:

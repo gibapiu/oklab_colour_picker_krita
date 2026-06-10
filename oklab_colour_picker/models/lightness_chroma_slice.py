@@ -35,8 +35,7 @@ class LightnessChromaSliceModel(SelectorModel):
     """Lightness/chroma selector at a fixed OKLab hue.
 
     The x axis spans absolute OKLCh chroma in ``[0, color_math.SRGB_MAX_CHROMA]``,
-    so the selectable region traces the per-hue sRGB gamut leaf rather than
-    filling the whole rectangle.
+    so the selectable region traces the per-hue sRGB gamut leaf rather than filling the whole rectangle.
     """
 
     hue: float

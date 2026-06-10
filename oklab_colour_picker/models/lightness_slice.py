@@ -33,11 +33,8 @@ LIGHTNESS_EPSILON = 1e-9
 class LightnessSliceModel(SelectorModel):
     """Circular hue/chroma selector at a fixed OKLab lightness.
 
-    Radius maps linearly to absolute OKLCh chroma in
-    ``[0, color_math.SRGB_MAX_CHROMA]``, matching the Lightness tab's x-axis
-    extent. Pixels whose chroma exceeds the per-hue sRGB cusp at this
-    lightness fall outside the gamut leaf and render transparent, so the
-    irregular gamut outline is visible directly on the disk.
+    Radius maps linearly to absolute OKLCh chroma in ``[0, color_math.SRGB_MAX_CHROMA]``, matching the Lightness tab's x-axis extent.
+    Pixels whose chroma exceeds the per-hue sRGB cusp at this lightness fall outside the gamut leaf and render transparent.
     """
 
     lightness: float

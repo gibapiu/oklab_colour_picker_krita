@@ -1,7 +1,7 @@
 """Qt binding seam: import QtCore/QtGui/QtWidgets from here, not from PyQt.
 
-Resolves to PyQt6 when available, else PyQt5. Set ``OKLAB_QT_API=PyQt5|PyQt6``
-to force a binding.
+Resolves to PyQt6 when available, else PyQt5.
+Set ``OKLAB_QT_API=PyQt5|PyQt6`` to force a binding.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ _loaded: dict[str, object] | None = None
 def select_binding(qversion: str | None = None) -> None:
     """Pin the Qt binding from a ``qVersion()`` string, before any Qt access.
 
-    A no-op when ``qversion`` gives no usable hint. Raises if a different
-    binding has already loaded.
+    A no-op when ``qversion`` gives no usable hint.
+    Raises if a different binding has already loaded.
     """
 
     global _preferred_api
@@ -33,8 +33,8 @@ def select_binding(qversion: str | None = None) -> None:
     if _loaded is not None:
         if _loaded["QT_API"] != chosen:
             raise RuntimeError(
-                f"Qt binding already loaded as {_loaded['QT_API']!r}; cannot "
-                f"switch to {chosen!r}. Call select_binding() before any Qt access."
+                f"Qt binding already loaded as {_loaded['QT_API']!r}."
+                f"Cannot switch to {chosen!r}. Call select_binding() before any Qt access."
             )
         return
     _preferred_api = chosen
@@ -115,8 +115,8 @@ def _forced_api() -> str | None:
     if env:
         if env not in SUPPORTED_BINDINGS:
             raise ValueError(
-                f"{_ENV_VAR}={env!r} is not supported; expected one of "
-                f"{SUPPORTED_BINDINGS}"
+                f"{_ENV_VAR}={env!r} is not supported."
+                f"Expected one of {SUPPORTED_BINDINGS}"
             )
         _reject_conflict(env, imported)
         return env

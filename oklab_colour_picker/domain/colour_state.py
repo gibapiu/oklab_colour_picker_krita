@@ -16,9 +16,8 @@ from oklab_colour_picker.domain import color_math
 class ColourIntent:
     """Canonical selected-colour intent owned by the controller.
 
-    It carries the OKLab paint value plus selector L/C/H intent, including
-    remembered hue for achromatic colours. It does not describe clipped sRGB
-    display fallback; that belongs to the presentation layer.
+    Carries the OKLab paint value plus selector L/C/H intent, including user-selected hue for achromatic colours.
+    Does not describe clipped sRGB display fallback which belongs to the presentation layer.
     """
 
     _paint_oklab: tuple[float, float, float]
