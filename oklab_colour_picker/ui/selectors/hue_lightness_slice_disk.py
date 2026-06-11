@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from oklab_colour_picker.qt import QtCore, QtGui
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui
 
 from oklab_colour_picker.models import HueLightnessSliceModel
 from oklab_colour_picker.models.geometry import disk_geometry

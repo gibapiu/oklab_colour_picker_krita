@@ -19,7 +19,7 @@ class QtSingleShotScheduler:
     """Coalesce work onto the next Qt event-loop turn."""
 
     def call_soon(self, callback: Callable[[], None]) -> None:
-        from oklab_colour_picker.qt import QtCore
+        from oklab_colour_picker.infrastructure.qt_facade import QtCore
 
         QtCore.QTimer.singleShot(0, callback)
 
@@ -31,7 +31,7 @@ class QtForegroundTimer:
     """QTimer wrapper that drives foreground polling at a fixed cadence."""
 
     def __init__(self) -> None:
-        from oklab_colour_picker.qt import QtCore
+        from oklab_colour_picker.infrastructure.qt_facade import QtCore
 
         self._timer = QtCore.QTimer()
         self._timer.setInterval(FOREGROUND_POLL_INTERVAL_MS)

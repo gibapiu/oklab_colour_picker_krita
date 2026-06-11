@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 import numpy as np
-from oklab_colour_picker.qt import QtCore, QtGui, QtWidgets, event_xy
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui, QtWidgets, event_xy
 
 from oklab_colour_picker.domain import selector_interaction
 from oklab_colour_picker.domain.colour_presentation import (

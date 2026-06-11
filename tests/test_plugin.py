@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("pytestqt")
 
-from oklab_colour_picker.qt import QtCore, QtWidgets
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtWidgets
 
 import oklab_colour_picker
 import oklab_colour_picker.plugin as plugin_module
@@ -21,13 +21,14 @@ from oklab_colour_picker.ui.dock import ColourPickerDockPanel
 
 def test_registers_krita_dock_factory():
     app = FakeKritaApp()
+    krita_api = FakeKritaApi(app)
 
-    assert register_plugin(krita_instance=app, api=FakeKritaApi(app)) is True
+    assert register_plugin(krita_instance=app, krita_api=krita_api) is True
 
     assert len(app.factories) == 1
     factory = app.factories[0]
     assert factory.identifier == DOCK_FACTORY_ID
-    assert factory.area == FakeDockWidgetFactoryBase.DockRight
+    assert factory.area is krita_api.dock_area
 
 
 def test_vendor_site_packages_are_added_before_runtime_imports(tmp_path, monkeypatch):
@@ -282,10 +283,6 @@ class FakeKritaApp:
         return "/tmp/fake-krita-app-data"
 
 
-class FakeDockWidgetFactoryBase:
-    DockRight = object()
-
-
 class FakeDockWidgetFactory:
     def __init__(self, identifier, area, widget_class):
         self.identifier = identifier
@@ -295,18 +292,25 @@ class FakeDockWidgetFactory:
 
 class FakeKritaApi:
     def __init__(self, app):
-        self.Krita = FakeKrita(app)
-        self.DockWidget = FakeDockWidget
-        self.DockWidgetFactory = FakeDockWidgetFactory
-        self.DockWidgetFactoryBase = FakeDockWidgetFactoryBase
+        self.app = app
+        self.dock_widget_base = FakeDockWidget
+        self.dock_area = object()
 
+    def application(self):
+        return self.app
 
-class FakeKrita:
-    def __init__(self, app):
-        self._app = app
+    def qt_version(self, application):
+        assert application is self.app
+        return None
 
-    def instance(self):
-        return self._app
+    def app_data_location(self, application):
+        assert application is self.app
+        return application.getAppDataLocation()
+
+    def register_dock_widget(self, application, identifier, dock_widget_type):
+        application.addDockWidgetFactory(
+            FakeDockWidgetFactory(identifier, self.dock_area, dock_widget_type)
+        )
 
 
 class FakeDockWidget(QtWidgets.QDockWidget):

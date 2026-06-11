@@ -30,6 +30,16 @@ def test_krita_imports_are_limited_to_boundary_files():
     assert offenders == []
 
 
+def test_krita_facade_stays_safe_for_early_plugin_bootstrap():
+    path = ROOT / "oklab_colour_picker" / "infrastructure" / "krita_facade.py"
+    tree = ast.parse(path.read_text(), filename=path.as_posix())
+    imports = set(_imported_modules(tree))
+
+    assert "numpy" not in imports
+    assert not any(starts_with_any(module, QT_BINDING_MODULE_PREFIXES) for module in imports)
+    assert "oklab_colour_picker.infrastructure.qt_facade" not in imports
+
+
 def test_python_modules_live_in_declared_package_layers():
     offenders = [
         path.as_posix()

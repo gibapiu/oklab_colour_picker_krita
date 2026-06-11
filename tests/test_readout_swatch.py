@@ -2,7 +2,7 @@ import pytest
 
 pytest.importorskip("pytestqt")
 
-from oklab_colour_picker.qt import QtGui
+from oklab_colour_picker.infrastructure.qt_facade import QtGui
 
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.ui.readout.swatch import UnifiedSwatch, hex_to_oklab

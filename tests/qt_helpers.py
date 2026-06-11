@@ -6,7 +6,7 @@ strings: mouse ``"press"|"move"|"release"``, key/focus per the maps below.
 
 from __future__ import annotations
 
-from oklab_colour_picker.qt import QtCore, QtGui
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui
 
 
 _NO_MODIFIER = QtCore.Qt.KeyboardModifier.NoModifier

@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("pytestqt")
 
-from oklab_colour_picker.qt import QtCore, QtWidgets
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtWidgets
 
 from tests.qt_helpers import send_mouse
 from oklab_colour_picker.app.selector_model_cache import SelectorMode

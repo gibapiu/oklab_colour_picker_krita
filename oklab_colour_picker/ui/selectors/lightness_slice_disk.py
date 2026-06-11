@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from oklab_colour_picker.qt import QtCore, QtGui
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui
 
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.models import LightnessSliceModel

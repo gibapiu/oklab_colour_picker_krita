@@ -1,4 +1,4 @@
-"""Qt binding seam: import QtCore/QtGui/QtWidgets from here, not from PyQt.
+"""Qt binding facade: import QtCore/QtGui/QtWidgets from here, not from PyQt.
 
 Resolves to PyQt6 when available, else PyQt5.
 Set ``OKLAB_QT_API=PyQt5|PyQt6`` to force a binding.

@@ -199,7 +199,7 @@ def check_python_rules(sources: list[SourceFile]) -> int:
             if isinstance(node, ast.Import):
                 modules = [alias.name for alias in node.names]
                 if any(module == "krita" or module.startswith("krita.") for module in modules) and rp not in KRITA_IMPORT_ALLOWED:
-                    fail(f"{rp}: Krita imports are only allowed in plugin/controller adapter files")
+                    fail(f"{rp}: Krita imports are only allowed in Krita boundary modules")
                     errors += 1
                 if any(module.startswith("legacy_plugin") for module in modules):
                     fail(f"{rp}: imports from legacy plugin are forbidden")
@@ -213,18 +213,18 @@ def check_python_rules(sources: list[SourceFile]) -> int:
                     any(starts_with_any(module, QT_BINDING_MODULE_PREFIXES) for module in modules)
                     and rp not in QT_BINDING_IMPORT_ALLOWED
                 ):
-                    fail(f"{rp}: Qt bindings may only be imported in the oklab_colour_picker.qt shim")
+                    fail(f"{rp}: Qt bindings may only be imported in the Qt facade")
                     errors += 1
                 if is_lower_layer_file(rp):
                     for module in modules:
                         if starts_with_any(module, LOWER_LAYER_FORBIDDEN_MODULE_PREFIXES):
-                            fail(f"{rp}: lower layers must not import UI, plugin, or the Qt shim")
+                            fail(f"{rp}: lower layers must not import UI, plugin, or the Qt facade")
                             errors += 1
 
             if isinstance(node, ast.ImportFrom):
                 module = node.module or ""
                 if (module == "krita" or module.startswith("krita.")) and rp not in KRITA_IMPORT_ALLOWED:
-                    fail(f"{rp}: Krita imports are only allowed in plugin/controller adapter files")
+                    fail(f"{rp}: Krita imports are only allowed in Krita boundary modules")
                     errors += 1
                 if module.startswith("legacy_plugin"):
                     fail(f"{rp}: imports from legacy plugin are forbidden")
@@ -236,12 +236,12 @@ def check_python_rules(sources: list[SourceFile]) -> int:
                     starts_with_any(module, QT_BINDING_MODULE_PREFIXES)
                     and rp not in QT_BINDING_IMPORT_ALLOWED
                 ):
-                    fail(f"{rp}: Qt bindings may only be imported in the oklab_colour_picker.qt shim")
+                    fail(f"{rp}: Qt bindings may only be imported in the Qt facade")
                     errors += 1
                 if is_lower_layer_file(rp):
                     for imported_module in import_from_references(node, rp):
                         if starts_with_any(imported_module, LOWER_LAYER_FORBIDDEN_MODULE_PREFIXES):
-                            fail(f"{rp}: lower layers must not import UI, plugin, or the Qt shim")
+                            fail(f"{rp}: lower layers must not import UI, plugin, or the Qt facade")
                             errors += 1
 
             if not isinstance(node, ast.Call):

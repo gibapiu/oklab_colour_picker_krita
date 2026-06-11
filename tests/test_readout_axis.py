@@ -3,7 +3,7 @@ import pytest
 
 pytest.importorskip("pytestqt")
 
-from oklab_colour_picker.qt import QtWidgets
+from oklab_colour_picker.infrastructure.qt_facade import QtWidgets
 
 from oklab_colour_picker.render import renderers
 from oklab_colour_picker.ui.readout.axis import AxisTrackPresenter, ReadoutAxisRows

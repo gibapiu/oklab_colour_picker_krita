@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-from oklab_colour_picker.qt import QtCore, QtGui, QtWidgets, event_pos
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui, QtWidgets, event_pos
 
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.ui.readout.style import (

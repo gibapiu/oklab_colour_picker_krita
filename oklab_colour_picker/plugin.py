@@ -2,42 +2,38 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
 import sys
 from typing import Callable
 
 from oklab_colour_picker.infrastructure.dependency_bootstrap import install_numpy
+from oklab_colour_picker.infrastructure.krita_facade import (
+    KritaFacade,
+    load_krita,
+)
 
 
 DOCK_FACTORY_ID = "oklab_colour_picker_dock"
 DOCK_TITLE = "OKLab Colour Selector"
-DOCK_AREA_NAME = "DockRight"
 VENDOR_ROOT_DIRECTORY_NAME = "oklab_colour_picker"
 VENDOR_SITE_PACKAGES_DIRECTORY_NAME = "site-packages"
 
 
-@dataclass(frozen=True)
-class KritaApi:
-    Krita: object
-    DockWidget: type
-    DockWidgetFactory: type
-    DockWidgetFactoryBase: object
-
-
-def register_plugin(*, krita_instance=None, api: KritaApi | None = None) -> bool:
-    krita_api = api if api is not None else _load_krita_api()
+def register_plugin(*, krita_instance=None, krita_api: KritaFacade | None = None) -> bool:
+    if krita_api is None:
+        krita_api = load_krita()
     if krita_api is None:
         return False
 
-    app = krita_instance if krita_instance is not None else krita_api.Krita.instance()
-    _seed_qt_binding(krita_api, app)
-    app_data_location = _app_data_location(app)
+    app = krita_instance if krita_instance is not None else krita_api.application()
+    _seed_qt_binding(krita_api.qt_version(app))
+    app_data_location = krita_api.app_data_location(app)
     _add_vendor_site_packages(app_data_location)
-    dock_class = create_dock_widget_class(krita_api.DockWidget, app_data_location=app_data_location)
-    dock_area = getattr(krita_api.DockWidgetFactoryBase, DOCK_AREA_NAME)
-    factory = krita_api.DockWidgetFactory(DOCK_FACTORY_ID, dock_area, dock_class)
-    app.addDockWidgetFactory(factory)
+    dock_class = create_dock_widget_class(
+        krita_api.dock_widget_base,
+        app_data_location=app_data_location,
+    )
+    krita_api.register_dock_widget(app, DOCK_FACTORY_ID, dock_class)
     return True
 
 
@@ -82,34 +78,12 @@ def create_dock_widget_class(
     return OKLabColourPickerDock
 
 
-def _seed_qt_binding(krita_api: KritaApi, app) -> None:
+def _seed_qt_binding(qt_version: str | None) -> None:
     """Pin the Qt binding to Krita's runtime version before any UI import."""
 
-    from oklab_colour_picker import qt
+    from oklab_colour_picker.infrastructure.qt_facade import select_binding
 
-    qt.select_binding(_krita_qt_version(krita_api, app))
-
-
-def _krita_qt_version(krita_api: KritaApi, app) -> str | None:
-    for source in (_krita_module(), krita_api.Krita, app):
-        getter = getattr(source, "qVersion", None)
-        if not callable(getter):
-            continue
-        try:
-            version = getter()
-        except Exception:
-            continue
-        if version:
-            return str(version)
-    return None
-
-
-def _krita_module():
-    try:
-        import krita
-    except ImportError:
-        return None
-    return krita
+    select_binding(qt_version)
 
 
 _KNOWN_RUNTIME_DEPENDENCIES = frozenset({"numpy"})
@@ -137,11 +111,6 @@ def _vendor_site_packages_path(app_data_location: str | None = None) -> str:
     )
 
 
-def _app_data_location(app) -> str | None:
-    location = getattr(app, "getAppDataLocation", lambda: None)()
-    return None if location is None else str(location)
-
-
 def _is_known_runtime_dependency(error: ImportError) -> bool:
     name = getattr(error, "name", None) or ""
     root = name.split(".", 1)[0]
@@ -158,7 +127,7 @@ def _build_missing_dependency_widget(
     vendor_path: str,
     dependency_installer: Callable[[str], object],
 ):
-    from oklab_colour_picker.qt import QtCore, QtWidgets
+    from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtWidgets
 
     missing = error.name or str(error)
     widget = QtWidgets.QWidget()
@@ -250,17 +219,4 @@ def _create_controller():
         KritaForegroundAdapter(),
         scheduler=QtSingleShotScheduler(),
         foreground_timer=QtForegroundTimer(),
-    )
-
-
-def _load_krita_api() -> KritaApi | None:
-    try:
-        from krita import DockWidget, DockWidgetFactory, DockWidgetFactoryBase, Krita
-    except ImportError:
-        return None
-    return KritaApi(
-        Krita=Krita,
-        DockWidget=DockWidget,
-        DockWidgetFactory=DockWidgetFactory,
-        DockWidgetFactoryBase=DockWidgetFactoryBase,
     )
