@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-import os
+from enum import Enum, auto
+import logging
 import sys
 from typing import Callable
 
 from oklab_colour_picker.infrastructure.dependency_bootstrap import install_numpy
+from oklab_colour_picker.infrastructure import dependency_paths
 from oklab_colour_picker.infrastructure.krita_facade import (
     KritaFacade,
     load_krita,
@@ -15,8 +17,9 @@ from oklab_colour_picker.infrastructure.krita_facade import (
 
 DOCK_FACTORY_ID = "oklab_colour_picker_dock"
 DOCK_TITLE = "OKLab Colour Selector"
-VENDOR_ROOT_DIRECTORY_NAME = "oklab_colour_picker"
-VENDOR_SITE_PACKAGES_DIRECTORY_NAME = "site-packages"
+
+
+logger = logging.getLogger(__name__)
 
 
 def register_plugin(*, krita_instance=None, krita_api: KritaFacade | None = None) -> bool:
@@ -54,15 +57,18 @@ def create_dock_widget_class(
             try:
                 from oklab_colour_picker.ui.dock import ColourPickerDockPanel
             except ImportError as exc:
-                if not _is_known_runtime_dependency(exc):
+                dependency_issue_kind = _runtime_dependency_issue_kind(exc)
+                if dependency_issue_kind is None:
                     raise
-                self.setWidget(
-                    _build_missing_dependency_widget(
-                        exc,
-                        vendor_path=_vendor_site_packages_path(app_data_location),
+                if dependency_issue_kind is _DependencyIssueKind.MISSING:
+                    widget = _build_missing_dependency_widget(
+                        vendor_path=dependency_paths.vendor_site_packages_path(app_data_location),
                         dependency_installer=dependency_installer,
                     )
-                )
+                else:
+                    logger.error("NumPy could not be loaded by Krita", exc_info=True)
+                    widget = _build_dependency_load_failure_widget()
+                self.setWidget(widget)
                 return
 
             self._controller = _create_controller() if controller_factory is None else controller_factory()
@@ -86,50 +92,38 @@ def _seed_qt_binding(qt_version: str | None) -> None:
     select_binding(qt_version)
 
 
-_KNOWN_RUNTIME_DEPENDENCIES = frozenset({"numpy"})
+class _DependencyIssueKind(Enum):
+    MISSING = auto()
+    LOAD_FAILED = auto()
 
 
 def _add_vendor_site_packages(app_data_location: str | None = None) -> None:
-    vendor_path = _vendor_site_packages_path(app_data_location)
-    if os.path.isdir(vendor_path) and vendor_path not in sys.path:
-        sys.path.insert(0, vendor_path)
+    dependency_path = dependency_paths.resolve_dependency_path(app_data_location)
+    if dependency_path is not None and dependency_path not in sys.path:
+        sys.path.insert(0, dependency_path)
 
 
-def _vendor_site_packages_path(app_data_location: str | None = None) -> str:
-    if app_data_location:
-        return os.path.join(
-            app_data_location,
-            VENDOR_ROOT_DIRECTORY_NAME,
-            VENDOR_SITE_PACKAGES_DIRECTORY_NAME,
-        )
+def _runtime_dependency_issue_kind(error: ImportError) -> _DependencyIssueKind | None:
+    name = getattr(error, "name", None) or ""
+    root = name.split(".", 1)[0]
+    message = str(error).lower()
+    if root != "numpy" and "numpy" not in message:
+        return None
 
-    package_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(
-        os.path.dirname(package_dir),
-        VENDOR_ROOT_DIRECTORY_NAME,
-        VENDOR_SITE_PACKAGES_DIRECTORY_NAME,
+    return (
+        _DependencyIssueKind.MISSING
+        if isinstance(error, ModuleNotFoundError) and name == "numpy"
+        else _DependencyIssueKind.LOAD_FAILED
     )
 
 
-def _is_known_runtime_dependency(error: ImportError) -> bool:
-    name = getattr(error, "name", None) or ""
-    root = name.split(".", 1)[0]
-    if root in _KNOWN_RUNTIME_DEPENDENCIES:
-        return True
-
-    message = str(error).lower()
-    return any(dependency in message for dependency in _KNOWN_RUNTIME_DEPENDENCIES)
-
-
 def _build_missing_dependency_widget(
-    error: ImportError,
     *,
     vendor_path: str,
     dependency_installer: Callable[[str], object],
 ):
     from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtWidgets
 
-    missing = error.name or str(error)
     widget = QtWidgets.QWidget()
     widget.setObjectName("oklab-missing-dependency")
 
@@ -138,7 +132,7 @@ def _build_missing_dependency_widget(
     layout.setSpacing(10)
 
     label = QtWidgets.QLabel(
-        f"OKLab Colour Selector could not start because Python dependency '{missing}' is missing.\n\n"
+        "OKLab Colour Selector could not start because NumPy is not installed.\n\n"
         "Krita does not always ship NumPy. You can install NumPy into Krita's app data, then restart Krita."
     )
     label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -190,7 +184,7 @@ def _build_missing_dependency_widget(
         response = QtWidgets.QMessageBox.question(
             widget,
             "Install NumPy",
-            "Install NumPy for OKLab Colour Selector?\n\n"
+            "Install NumPy for OKLab Colour Picker?\n\n"
             "Krita will download NumPy from PyPI and install it into the plugin's private dependency folder.\n\n"
             "Restart Krita after installation.",
             QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
@@ -204,6 +198,28 @@ def _build_missing_dependency_widget(
         QtCore.QThreadPool.globalInstance().start(InstallRunnable(signals))
 
     button.clicked.connect(confirm_install)
+    return widget
+
+
+def _build_dependency_load_failure_widget():
+    from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtWidgets
+
+    widget = QtWidgets.QWidget()
+    widget.setObjectName("oklab-dependency-load-failure")
+
+    layout = QtWidgets.QVBoxLayout(widget)
+    layout.setContentsMargins(16, 16, 16, 16)
+    layout.setSpacing(10)
+
+    label = QtWidgets.QLabel(
+        "OKLab Colour Selector could not start because NumPy could not be loaded.\n\n"
+        "The NumPy installation available to Krita is not working. "
+        "Reinstall or update NumPy for Krita, then restart Krita.\n\n"
+        "If the problem continues, see the plugin troubleshooting guide."
+    )
+    label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+    label.setWordWrap(True)
+    layout.addWidget(label)
     return widget
 
 

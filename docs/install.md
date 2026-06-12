@@ -27,17 +27,14 @@ Or use your distro's package (`sudo apt install python3-numpy`,
 The plugin installs it into:
 
 ```text
-%APPDATA%\krita\oklab_colour_picker\site-packages
+%APPDATA%\krita\oklab_colour_picker\site-packages\<Python ABI tag>
 ```
 
-To do it by hand:
-
-```bat
-"C:\Program Files\Krita (x64)\bin\python.exe" -m pip install ^
-  --upgrade --only-binary=:all: ^
-  --target "%APPDATA%\krita\oklab_colour_picker\site-packages" ^
-  "numpy>=1.26,<3"
-```
+The final directory identifies Krita's Python ABI, for example
+`cpython-314-x86_64`. This keeps native NumPy extensions installed by different
+Krita Python runtimes separate. Use the docker's installer so the correct
+directory is selected automatically, including on builds that do not expose an
+SOABI value.
 
 **macOS** — use Krita's bundled Python:
 

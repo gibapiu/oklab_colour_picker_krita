@@ -120,11 +120,15 @@ The readout panel runs the same idea with two states: `IDLE` and `EDITING`. Whil
 
 ### 2.5 Krita 5 and 6 support
 
-Krita 6 (aka 5.3) introduced quite a few breaking changes to the Pything Plugins spport: different majour PyQt version and partially incompatible Krita API.
-Two small boundaries keep those differences out of the rest of the plugin:
+Krita 6 (aka 5.3) introduced several breaking changes to Python plugin support:
+a different major PyQt version and a partially incompatible Krita API. When both
+versions run in parallel, their NumPy builds may also be incompatible.
+
+Three small boundaries keep those differences out of the rest of the plugin:
 
 - `krita_facade.py` presents one plugin-bootstrap API over both Krita versions, including dock registration and enum differences.
-- `infrastructure/qt_facade.py` presents one Qt API over PyQt5 and PyQt6, including binding selection and event differences.
+- `qt_facade.py` presents one Qt API over PyQt5 and PyQt6, including binding selection and event differences.
+- `dependency_paths.py` isolates private binary dependencies by Python ABI, so Krita runtimes that share app data cannot load each other's NumPy extensions.
 
 Everything downstream uses those stable interfaces and stays indifferent to which Krita and Qt versions are running.
 

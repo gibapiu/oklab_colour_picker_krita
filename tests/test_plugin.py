@@ -9,6 +9,7 @@ from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtWidgets
 
 import oklab_colour_picker
 import oklab_colour_picker.plugin as plugin_module
+from oklab_colour_picker.infrastructure import dependency_paths
 from oklab_colour_picker.infrastructure.dependency_bootstrap import InstallResult
 from oklab_colour_picker.plugin import (
     DOCK_FACTORY_ID,
@@ -31,9 +32,13 @@ def test_registers_krita_dock_factory():
     assert factory.area is krita_api.dock_area
 
 
-def test_vendor_site_packages_are_added_before_runtime_imports(tmp_path, monkeypatch):
+def test_runtime_vendor_site_packages_are_added_before_runtime_imports(tmp_path, monkeypatch):
     vendor_dir = _vendor_path(tmp_path)
-    vendor_dir.mkdir(parents=True)
+    monkeypatch.setattr(
+        dependency_paths,
+        "resolve_dependency_path",
+        lambda _app_data_location: str(vendor_dir),
+    )
     monkeypatch.setattr(sys, "path", list(sys.path))
 
     plugin_module._add_vendor_site_packages(str(tmp_path))
@@ -41,13 +46,14 @@ def test_vendor_site_packages_are_added_before_runtime_imports(tmp_path, monkeyp
     assert sys.path[0] == str(vendor_dir)
 
 
-def test_vendor_site_packages_fall_back_next_to_plugin_package(tmp_path, monkeypatch):
-    package_dir = tmp_path / "pykrita" / "oklab_colour_picker"
-    package_dir.mkdir(parents=True)
-    expected = package_dir / plugin_module.VENDOR_SITE_PACKAGES_DIRECTORY_NAME
-    monkeypatch.setattr(plugin_module, "__file__", str(package_dir / "plugin.py"))
+def test_vendor_site_packages_are_unchanged_when_resolver_finds_none(tmp_path, monkeypatch):
+    original_path = list(sys.path)
+    monkeypatch.setattr(dependency_paths, "resolve_dependency_path", lambda _location: None)
+    monkeypatch.setattr(sys, "path", list(original_path))
 
-    assert plugin_module._vendor_site_packages_path() == str(expected)
+    plugin_module._add_vendor_site_packages(str(tmp_path))
+
+    assert sys.path == original_path
 
 
 def test_created_dock_builds_panel(qtbot):
@@ -78,15 +84,8 @@ def test_created_dock_syncs_foreground_on_canvas_change(qtbot):
     assert controller.last_force_sync is True
 
 
-@pytest.mark.parametrize(
-    "error",
-    [
-        ModuleNotFoundError("No module named 'numpy'", name="numpy"),
-        ImportError("Importing the numpy C-extensions failed: incompatible binary"),
-    ],
-)
-def test_dependency_failure_shows_numpy_installer(qtbot, monkeypatch, error):
-    _replace_dock_module_with_error(monkeypatch, error)
+def test_missing_numpy_shows_installer(qtbot, monkeypatch):
+    _replace_dock_module_with_missing_numpy(monkeypatch)
 
     dock = create_dock_widget_class(FakeDockWidget)()
     qtbot.addWidget(dock)
@@ -95,6 +94,35 @@ def test_dependency_failure_shows_numpy_installer(qtbot, monkeypatch, error):
     assert widget.objectName() == "oklab-missing-dependency"
     assert "numpy" in widget.findChild(QtWidgets.QLabel).text().lower()
     assert _install_button(widget).text() == "Install NumPy"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ImportError("Importing the numpy C-extensions failed: incompatible binary"),
+        ImportError(
+            "Error importing numpy: you should not try to import numpy from its source directory; "
+            "please exit the numpy source tree, and relaunch your Python interpreter from there"
+        ),
+        ModuleNotFoundError("No module named 'numpy.typing'", name="numpy.typing"),
+    ],
+)
+def test_broken_numpy_shows_diagnostic_without_installer(qtbot, monkeypatch, error):
+    _replace_dock_module_with_error(monkeypatch, error)
+
+    dock = create_dock_widget_class(FakeDockWidget)()
+    qtbot.addWidget(dock)
+
+    widget = dock.widget()
+    message = widget.findChild(QtWidgets.QLabel).text()
+    assert widget.objectName() == "oklab-dependency-load-failure"
+    assert "NumPy could not be loaded" in message
+    assert "Reinstall or update NumPy" in message
+    assert str(error) not in message
+    assert "source directory" not in message
+    assert "C-extensions" not in message
+    assert "is missing" not in message
+    assert _install_button(widget) is None
 
 
 def test_install_action_requires_confirmation(qtbot, monkeypatch, tmp_path):
@@ -231,8 +259,9 @@ def _replace_dock_module_with_error(monkeypatch, error):
 def _vendor_path(root):
     return (
         root
-        / plugin_module.VENDOR_ROOT_DIRECTORY_NAME
-        / plugin_module.VENDOR_SITE_PACKAGES_DIRECTORY_NAME
+        / dependency_paths.VENDOR_ROOT_DIRECTORY_NAME
+        / dependency_paths.VENDOR_SITE_PACKAGES_DIRECTORY_NAME
+        / dependency_paths.runtime_abi_tag()
     )
 
 
