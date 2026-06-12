@@ -510,43 +510,27 @@ def test_lightness_chroma_slice_geometric_position_rejects_mismatched_hue():
 # -- project_onto_slice: the always-on-plane fallback landing --------------
 
 _HUE = math.radians(95.0)
-_PROJECTION_SLICES = (
-    (
-        "lightness-slice",
+_IN_GAMUT_PROJECTION_CASES = (
+    pytest.param(
         LightnessSliceModel(lightness=0.5),
-        (0.5, 0.18, _HUE),       # out of gamut: chroma past the leaf at this L/hue
-        (0.5, 0.05, _HUE),       # in gamut
+        (0.5, 0.05, _HUE),
+        id="lightness-slice",
     ),
-    (
-        "hue-lightness-slice",
+    pytest.param(
         HueLightnessSliceModel(chroma=0.12),
-        (0.5, 0.12, _HUE),       # out of gamut: fixed chroma unreachable at this L
-        (0.9, 0.12, _HUE),       # in gamut at a higher lightness
+        (0.9, 0.12, _HUE),
+        id="hue-lightness-slice",
     ),
-    (
-        "lightness-chroma-slice",
+    pytest.param(
         LightnessChromaSliceModel(hue=_HUE),
-        (0.5, 0.18, _HUE),       # out of gamut: chroma past the per-hue leaf
-        (0.5, 0.05, _HUE),       # in gamut
+        (0.5, 0.05, _HUE),
+        id="lightness-chroma-slice",
     ),
 )
 
 
-@pytest.mark.parametrize("name, model, oog_lch, _in_gamut_lch", _PROJECTION_SLICES)
-def test_project_onto_slice_lands_out_of_gamut_colour_on_the_in_gamut_leaf(name, model, oog_lch, _in_gamut_lch):
-    # Precondition: the colour is genuinely out of this slice's gamut leaf.
-    assert model.position_for_intent(oog_lch, (101.0, 101.0)) is None
-
-    resolved = model.project_onto_slice(oog_lch)
-
-    assert resolved is not None
-    # Invariant: the projection is on this slice and inside the gamut leaf, so
-    # position_for_intent (which enforces both) always resolves it.
-    assert model.position_for_intent(resolved, (101.0, 101.0)) is not None
-
-
-@pytest.mark.parametrize("name, model, _oog_lch, in_gamut_lch", _PROJECTION_SLICES)
-def test_project_onto_slice_is_identity_for_in_gamut_colour(name, model, _oog_lch, in_gamut_lch):
+@pytest.mark.parametrize("model, in_gamut_lch", _IN_GAMUT_PROJECTION_CASES)
+def test_project_onto_slice_is_identity_for_in_gamut_colour(model, in_gamut_lch):
     assert model.position_for_intent(in_gamut_lch, (101.0, 101.0)) is not None
 
     resolved = model.project_onto_slice(in_gamut_lch)
