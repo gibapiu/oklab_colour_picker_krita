@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 
 pytest.importorskip("pytestqt")
-pytest.importorskip("PyQt5")
+pytestmark = pytest.mark.qt
 
-from PyQt5 import QtWidgets
+from oklab_colour_picker.infrastructure.qt_facade import QtWidgets
 
 from oklab_colour_picker.render import renderers
 from oklab_colour_picker.ui.readout.axis import AxisTrackPresenter, ReadoutAxisRows

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from PyQt5 import QtCore, QtGui, QtWidgets
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui, QtWidgets
 
 from oklab_colour_picker.app.readout_presenter import (
     ReadoutDisplay,

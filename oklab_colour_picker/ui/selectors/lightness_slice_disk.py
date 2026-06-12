@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from PyQt5 import QtCore, QtGui
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui
 
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.models import LightnessSliceModel
@@ -73,8 +73,8 @@ class LightnessSliceDiskWidget(SelectorWidget):
         cx, cy, radius = geometry
 
         painter.save()
-        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        painter.setBrush(QtCore.Qt.NoBrush)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         pen = QtGui.QPen(QtGui.QColor(255, 255, 255, 90), 1.0)
         pen.setCosmetic(True)
         painter.setPen(pen)
@@ -86,7 +86,7 @@ class LightnessSliceDiskWidget(SelectorWidget):
 
         # Tiny centre dot marks the C=0 neutral axis. Keep it small enough
         # that it doesn't obscure the selection indicator at the centre.
-        painter.setPen(QtCore.Qt.NoPen)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.setBrush(QtGui.QColor(255, 255, 255, 160))
         painter.drawEllipse(QtCore.QPointF(cx, cy), 1.5, 1.5)
         painter.restore()
@@ -100,8 +100,8 @@ class LightnessSliceDiskWidget(SelectorWidget):
             return
 
         painter.save()
-        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        painter.setBrush(QtCore.Qt.NoBrush)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         # Dark halo first, light stroke second — keeps the contour readable
         # both on washed-out high-L slices and dark low-L slices.
         halo = QtGui.QPen(QtGui.QColor(0, 0, 0, 180), 2.0)

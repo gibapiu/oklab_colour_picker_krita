@@ -4,10 +4,11 @@ import numpy as np
 import pytest
 
 pytest.importorskip("pytestqt")
-pytest.importorskip("PyQt5")
+pytestmark = pytest.mark.qt
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtWidgets
 
+from tests.qt_helpers import send_mouse
 from oklab_colour_picker.app.selector_model_cache import SelectorMode
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.domain.colour_presentation import (
@@ -181,8 +182,8 @@ def test_selector_widget_signals_emit_intent_not_presentation(qtbot):
     active.committed.connect(lambda colour: payloads.append(colour))
     point = QtCore.QPoint(40, 20)
 
-    _send_mouse(active, QtCore.QEvent.MouseButtonPress, point, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(active, QtCore.QEvent.MouseButtonRelease, point, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(active, "press", point)
+    send_mouse(active, "release", point)
 
     assert payloads
     assert all(isinstance(payload, ColourIntent) for payload in payloads if payload is not None)
@@ -208,16 +209,8 @@ def test_real_controller_normalized_commit_echo_keeps_emitter_pinned(qtbot):
     expected = active.model.color_at_position((click.x(), click.y()), (120, 80))
     assert expected is not None
 
-    press = QtGui.QMouseEvent(
-        QtCore.QEvent.MouseButtonPress, click, QtCore.Qt.LeftButton,
-        QtCore.Qt.LeftButton, QtCore.Qt.NoModifier,
-    )
-    release = QtGui.QMouseEvent(
-        QtCore.QEvent.MouseButtonRelease, click, QtCore.Qt.LeftButton,
-        QtCore.Qt.NoButton, QtCore.Qt.NoModifier,
-    )
-    QtCore.QCoreApplication.sendEvent(active, press)
-    QtCore.QCoreApplication.sendEvent(active, release)
+    send_mouse(active, "press", click)
+    send_mouse(active, "release", click)
 
     assert active.indicator_position() == pytest.approx(
         (float(click.x()), float(click.y()))
@@ -238,8 +231,8 @@ def test_real_controller_achromatic_hue_lightness_commit_keeps_emitter_pinned(qt
     active.resize(121, 121)
 
     click = QtCore.QPoint(60, 20)
-    _send_mouse(active, QtCore.QEvent.MouseButtonPress, click, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(active, QtCore.QEvent.MouseButtonRelease, click, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(active, "press", click)
+    send_mouse(active, "release", click)
 
     assert active.indicator_position() == pytest.approx((float(click.x()), float(click.y())))
 
@@ -257,8 +250,8 @@ def test_achromatic_hue_slider_moves_hue_lightness_selector_indicator(qtbot):
     active.resize(121, 121)
 
     click = QtCore.QPoint(60, 20)
-    _send_mouse(active, QtCore.QEvent.MouseButtonPress, click, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(active, QtCore.QEvent.MouseButtonRelease, click, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(active, "press", click)
+    send_mouse(active, "release", click)
 
     row = panel._readout_panel._row_h
     slider = row.slider
@@ -270,8 +263,8 @@ def test_achromatic_hue_slider_moves_hue_lightness_selector_indicator(qtbot):
         max(1, track.width() - 1),
     )
     target = QtCore.QPoint(target_x, track.center().y())
-    _send_mouse(slider, QtCore.QEvent.MouseButtonPress, target, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(slider, QtCore.QEvent.MouseButtonRelease, target, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(slider, "press", target)
+    send_mouse(slider, "release", target)
 
     hue = math.radians(panel._readout_panel._row_h.value())
     lightness = panel._readout_panel._row_l.value()
@@ -547,25 +540,13 @@ def test_achromatic_hue_lightness_pick_carries_click_hue_to_controller(qtbot):
 
     click = QtCore.QPoint(34, 90)
     expected_hue = math.atan2(60.0 - click.y(), click.x() - 60.0)
-    _send_mouse(active, QtCore.QEvent.MouseButtonPress, click, QtCore.Qt.LeftButton, QtCore.Qt.LeftButton)
-    _send_mouse(active, QtCore.QEvent.MouseButtonRelease, click, QtCore.Qt.LeftButton, QtCore.Qt.NoButton)
+    send_mouse(active, "press", click)
+    send_mouse(active, "release", click)
 
     assert controller.commits
     committed = controller.commits[-1]
     assert committed.chroma == pytest.approx(0.0, abs=1e-6)
     assert committed.hue == pytest.approx(expected_hue % math.tau, abs=1e-6)
-
-
-def _send_mouse(widget, event_type, point, button, buttons):
-    event = QtGui.QMouseEvent(
-        event_type,
-        point,
-        button,
-        buttons,
-        QtCore.Qt.NoModifier,
-    )
-    QtCore.QCoreApplication.sendEvent(widget, event)
-    return event
 
 
 def _assert_readout_matches(panel: ColourPickerDockPanel, colour) -> None:

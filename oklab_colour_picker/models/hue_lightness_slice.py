@@ -38,12 +38,9 @@ _hue_cusp_table_cache: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
 class HueLightnessSliceModel(SelectorModel):
     """Hue/lightness selector at a fixed OKLCh chroma.
 
-    Hue is the polar angle and OKLab lightness is inverse radius, so the centre
-    is white-lightness (L=1) and the rim is black (L=0). Pixels whose fixed
-    chroma exceeds the per-(L, hue) sRGB gamut leaf are not selectable. In
-    normal dock use this model is rebuilt from the selected colour's chroma, so
-    ``position_for_intent`` is expected to receive coordinates on this
-    fixed-chroma slice.
+    Hue is the polar angle and OKLab lightness is inverse radius:
+    the centre is white-lightness (L=1) and the rim is black (L=0).
+    Pixels whose fixed chroma exceeds the per-(L, hue) sRGB gamut leaf are not selectable.
     """
 
     chroma: float

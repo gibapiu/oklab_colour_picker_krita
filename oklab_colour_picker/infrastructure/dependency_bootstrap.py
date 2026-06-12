@@ -140,13 +140,11 @@ def _manylinux_platforms(arch: str, glibc_version: str) -> list[str]:
 def find_krita_python() -> str | None:
     """Locate a Python executable that matches Krita's runtime.
 
-    On Linux ``sys.executable`` may be a host Python, so it is used only after
-    proving that its major/minor version matches Krita's runtime. On Windows
-    ``sys.executable`` is ``krita.exe`` and the
-    bundled interpreter sits next to it. On macOS the bundle ships
-    ``krita_python`` alongside ``krita`` inside ``Contents/MacOS``. Some Krita
-    builds ship without a Python interpreter at all; in that case this returns
-    ``None`` and the caller must fall back to in-process pip.
+    On Linux ``sys.executable`` may be a host Python, so it is used only after proving that its major/minor version matches Krita's runtime.
+    On Windows ``sys.executable`` is ``krita.exe`` and the bundled interpreter sits next to it.
+    On macOS the bundle ships ``krita_python`` alongside ``krita`` inside ``Contents/MacOS``.
+
+    Some Krita builds ship without a Python interpreter at all. In that case this returns ``None`` and the caller must fall back to in-process pip.
     """
     executable = sys.executable
     if executable and _looks_like_python(Path(executable).name) and _python_matches_krita_runtime(executable):
@@ -200,10 +198,10 @@ def _install_via_subprocess(
 ) -> InstallResult | None:
     """Run an explicit pip wheel via the discovered interpreter.
 
-    Runs in isolated mode (``-I``) so the interpreter ignores ``PYTHONPATH`` and
-    user-site, and the install script's ``sys.path[0]`` wheel wins over any
-    leaked host pip. Returns ``None`` only when the interpreter
-    cannot be exercised, so the caller can fall back to the in-process path.
+    Runs in isolated mode (``-I``) so the interpreter ignores ``PYTHONPATH`` and user-site,
+    so the install script's ``sys.path[0]`` wheel wins over any leaked host pip.
+
+    Returns ``None`` only when the interpreter cannot be exercised, so the caller can fall back to the in-process path.
     """
     try:
         pip_wheel = _get_or_download_pip_wheel(vendor_path)
@@ -244,10 +242,7 @@ def _install_in_process(
 ) -> InstallResult:
     """Run an explicit pip wheel inside Krita's interpreter.
 
-    Used on Krita builds that bundle a Python runtime without exposing a
-    standalone python executable. This path mutates process-global Python state,
-    so it scopes the changes tightly and clears only pip modules before/after
-    the run to avoid mixing a leaked host pip with the selected wheel.
+    Used on Krita builds that bundle a Python runtime without exposing a standalone python executable.
     """
     try:
         pip_wheel = _get_or_download_pip_wheel(vendor_path)
@@ -348,8 +343,8 @@ def _download(url: str) -> bytes:
         raise PipBootstrapError(f"Could not download pip from PyPI: {exc}") from exc
 
 
-# Krita's bundled OpenSSL may resolve a CA path that is absent on the host
-# distro, so verification falls back to whichever common store can be located.
+# Krita's bundled OpenSSL may resolve a CA path that is absent on the host distro,
+# so verification falls back to whichever common store can be located.
 _CA_BUNDLE_CANDIDATES = (
     "/etc/ssl/certs/ca-certificates.crt",
     "/etc/pki/tls/certs/ca-bundle.crt",

@@ -3,10 +3,12 @@ from pathlib import Path
 
 from scripts.checks.architecture_policy import (
     KRITA_IMPORT_ALLOWED,
+    LOWER_LAYER_FORBIDDEN_MODULE_PREFIXES,
     PRESENTED_COLOUR_CONSTRUCTION_ALLOWED,
+    QT_BINDING_IMPORT_ALLOWED,
+    QT_BINDING_MODULE_PREFIXES,
     QT_OR_KRITA_MODULE_PREFIXES,
     SET_FOREGROUND_ALLOWED,
-    UI_LAYER_MODULE_PREFIXES,
     import_from_references,
     is_declared_package_module,
     is_lower_layer_file,
@@ -28,6 +30,16 @@ def test_krita_imports_are_limited_to_boundary_files():
     assert offenders == []
 
 
+def test_krita_facade_stays_safe_for_early_plugin_bootstrap():
+    path = ROOT / "oklab_colour_picker" / "infrastructure" / "krita_facade.py"
+    tree = ast.parse(path.read_text(), filename=path.as_posix())
+    imports = set(_imported_modules(tree))
+
+    assert "numpy" not in imports
+    assert not any(starts_with_any(module, QT_BINDING_MODULE_PREFIXES) for module in imports)
+    assert "oklab_colour_picker.infrastructure.qt_facade" not in imports
+
+
 def test_python_modules_live_in_declared_package_layers():
     offenders = [
         path.as_posix()
@@ -45,6 +57,30 @@ def test_ui_layer_does_not_import_krita():
         tree = ast.parse(full_path.read_text(), filename=path.as_posix())
         for module in _imported_modules(tree):
             if _is_krita_module(module):
+                offenders.append(f"{path}: {module}")
+
+    assert offenders == []
+
+
+def test_qt_bindings_are_limited_to_the_shim():
+    offenders = []
+    for path, tree in _project_python_asts():
+        if path in QT_BINDING_IMPORT_ALLOWED:
+            continue
+        for module in _imported_modules(tree):
+            if starts_with_any(module, QT_BINDING_MODULE_PREFIXES):
+                offenders.append(f"{path}: {module}")
+
+    assert offenders == []
+
+
+def test_tests_import_qt_only_through_the_shim():
+    offenders = []
+    for full_path in sorted((ROOT / "tests").rglob("*.py")):
+        path = full_path.relative_to(ROOT)
+        tree = ast.parse(full_path.read_text(), filename=path.as_posix())
+        for module in _imported_modules(tree):
+            if starts_with_any(module, QT_BINDING_MODULE_PREFIXES):
                 offenders.append(f"{path}: {module}")
 
     assert offenders == []
@@ -111,13 +147,13 @@ def test_selection_does_not_read_from_qimage_pixels():
     assert offenders == []
 
 
-def test_lower_layers_do_not_import_ui_or_plugin_layers():
+def test_lower_layers_do_not_import_ui_plugin_or_qt_shim():
     offenders = []
     for path, tree in _project_python_asts():
         if not is_lower_layer_file(path):
             continue
         for module in _project_import_references(tree, path):
-            if starts_with_any(module, UI_LAYER_MODULE_PREFIXES):
+            if starts_with_any(module, LOWER_LAYER_FORBIDDEN_MODULE_PREFIXES):
                 offenders.append(f"{path}: {module}")
 
     assert offenders == []

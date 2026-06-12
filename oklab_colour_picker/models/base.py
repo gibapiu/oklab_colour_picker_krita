@@ -30,11 +30,10 @@ class SelectorSelection:
 class SelectorModel(ABC):
     """Pure coordinate contract shared by selector widgets and renderers.
 
-    Position queries take canonical OKLCh ``(lightness, chroma, hue)`` - the
-    UI's source of truth. OKLab is reserved for
-    ``color_at_position`` outputs and the renderer pixel grid, where it is
-    the natural representation. Querying with OKLCh removes the lossy
-    ``oklab_to_oklch`` recovery that broke under Krita 8-bit normalisation.
+    Position queries take canonical OKLCh ``(lightness, chroma, hue)`` - the UI's source of truth.
+    OKLab is reserved for``color_at_position`` outputs and the renderer pixel grid.
+
+    Querying with OKLCh removes the lossy ``oklab_to_oklch`` recovery that broke under Krita 8-bit normalisation.
     """
 
     @abstractmethod
@@ -68,11 +67,7 @@ class SelectorModel(ABC):
         return self.position_for_intent(lch, size)
 
     def project_onto_slice(self, lch: OKLCh) -> OKLCh | None:
-        """Project an out-of-gamut ``lch`` onto this slice's in-gamut leaf.
-
-        The projection keeps the slice's fixed coordinate and clamps the free axes to the slice's gamut leaf,
-        so the result stays on this plane and inside sRGB.
-        """
+        """Project an out-of-gamut ``lch`` onto this slice's in-gamut leaf."""
 
         return None
 

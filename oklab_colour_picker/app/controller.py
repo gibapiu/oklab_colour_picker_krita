@@ -25,9 +25,8 @@ from oklab_colour_picker.domain.colour_state import (
 class ChangeKind(Enum):
     """Why the controller's colour state changed.
 
-    ``kind`` is informational for views that need it; it is **not** a source
-    tag and must never be used to skip a view. Echo absorption stays local in
-    each view's state machine.
+    ``kind`` is invormational for views that need it, not a source of truth to bypass a view.
+    Echo absorption stays local in each view's state machine.
     """
 
     PREVIEW = "preview"
@@ -39,12 +38,7 @@ class ChangeKind(Enum):
 
 @dataclass(frozen=True)
 class ColourSnapshot:
-    """Published colour read model.
-
-    The controller/store owns ``intent`` state, derives ``colour`` through the
-    presenter, and publishes snapshots to views. Subscribers consume this read
-    model; they do not derive fallback presentation themselves.
-    """
+    """Published colour read model."""
 
     colour: PresentedColour
     kind: ChangeKind
@@ -149,8 +143,7 @@ class ColourPickerController:
     ) -> None:
         """Set the policy that resolves each colour's out-of-gamut fallback.
 
-        The provider is queried per presented colour. This only stores it; it
-        does not present or broadcast.
+        The provider is queried per presented colour.
         """
 
         self._fallback_strategy_provider = provider
@@ -164,8 +157,7 @@ class ColourPickerController:
     def _broadcast(self, intent: ColourIntent, kind: ChangeKind) -> None:
         """Notify every listener uniformly (no skip-the-originator logic).
 
-        Each view's state machine decides whether to honour or absorb the
-        inbound colour; this is what keeps the data flow genuinely one-way.
+        Each view's state machine decides whether to honour or absorb the inbound colour.
         """
 
         snapshot = self._snapshot(intent, kind)
@@ -187,8 +179,8 @@ class ColourPickerController:
     def set_preview_colour(self, oklab: ColourIntent | Sequence[float] | None) -> None:
         """Set transient UI preview state without replacing any pending commit.
 
-        Broadcasts ``PREVIEW`` so *other* views can track a mid-drag preview;
-        the emitting view self-absorbs the echo via its own state machine.
+        Broadcasts ``PREVIEW`` so *other* views can track a mid-drag preview.
+        The emitting view self-absorbs the echo via its own state machine.
         """
 
         self._selected_intent = None if oklab is None else self._intent_from_value(oklab)
@@ -224,10 +216,8 @@ class ColourPickerController:
     def _acquire_foreground(self, *, force: bool = False) -> ColourIntent | None:
         """Read the adapter foreground into state without broadcasting.
 
-        Returns the new colour when state changed (caller decides whether to
-        broadcast), else ``None``. This is the single idempotent acquisition
-        primitive shared by the poll timer, canvasChanged, and the
-        synchronous subscribe-time pull.
+        Single idempotent acquisition primitive shared by the poll timer,
+        canvasChanged, and the synchronous subscribe-time pull.
         """
 
         if self._local_interaction_blocks_external_sync(force=force):

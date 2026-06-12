@@ -4,12 +4,13 @@ import types
 import pytest
 
 pytest.importorskip("pytestqt")
-pytest.importorskip("PyQt5")
+pytestmark = pytest.mark.qt
 
-from PyQt5 import QtCore, QtWidgets
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtWidgets
 
 import oklab_colour_picker
 import oklab_colour_picker.plugin as plugin_module
+from oklab_colour_picker.infrastructure import dependency_paths
 from oklab_colour_picker.infrastructure.dependency_bootstrap import InstallResult
 from oklab_colour_picker.plugin import (
     DOCK_FACTORY_ID,
@@ -22,18 +23,23 @@ from oklab_colour_picker.ui.dock import ColourPickerDockPanel
 
 def test_registers_krita_dock_factory():
     app = FakeKritaApp()
+    krita_api = FakeKritaApi(app)
 
-    assert register_plugin(krita_instance=app, api=FakeKritaApi(app)) is True
+    assert register_plugin(krita_instance=app, krita_api=krita_api) is True
 
     assert len(app.factories) == 1
     factory = app.factories[0]
     assert factory.identifier == DOCK_FACTORY_ID
-    assert factory.area == FakeDockWidgetFactoryBase.DockRight
+    assert factory.area is krita_api.dock_area
 
 
-def test_vendor_site_packages_are_added_before_runtime_imports(tmp_path, monkeypatch):
+def test_runtime_vendor_site_packages_are_added_before_runtime_imports(tmp_path, monkeypatch):
     vendor_dir = _vendor_path(tmp_path)
-    vendor_dir.mkdir(parents=True)
+    monkeypatch.setattr(
+        dependency_paths,
+        "resolve_dependency_path",
+        lambda _app_data_location: str(vendor_dir),
+    )
     monkeypatch.setattr(sys, "path", list(sys.path))
 
     plugin_module._add_vendor_site_packages(str(tmp_path))
@@ -41,13 +47,14 @@ def test_vendor_site_packages_are_added_before_runtime_imports(tmp_path, monkeyp
     assert sys.path[0] == str(vendor_dir)
 
 
-def test_vendor_site_packages_fall_back_next_to_plugin_package(tmp_path, monkeypatch):
-    package_dir = tmp_path / "pykrita" / "oklab_colour_picker"
-    package_dir.mkdir(parents=True)
-    expected = package_dir / plugin_module.VENDOR_SITE_PACKAGES_DIRECTORY_NAME
-    monkeypatch.setattr(plugin_module, "__file__", str(package_dir / "plugin.py"))
+def test_vendor_site_packages_are_unchanged_when_resolver_finds_none(tmp_path, monkeypatch):
+    original_path = list(sys.path)
+    monkeypatch.setattr(dependency_paths, "resolve_dependency_path", lambda _location: None)
+    monkeypatch.setattr(sys, "path", list(original_path))
 
-    assert plugin_module._vendor_site_packages_path() == str(expected)
+    plugin_module._add_vendor_site_packages(str(tmp_path))
+
+    assert sys.path == original_path
 
 
 def test_created_dock_builds_panel(qtbot):
@@ -78,15 +85,8 @@ def test_created_dock_syncs_foreground_on_canvas_change(qtbot):
     assert controller.last_force_sync is True
 
 
-@pytest.mark.parametrize(
-    "error",
-    [
-        ModuleNotFoundError("No module named 'numpy'", name="numpy"),
-        ImportError("Importing the numpy C-extensions failed: incompatible binary"),
-    ],
-)
-def test_dependency_failure_shows_numpy_installer(qtbot, monkeypatch, error):
-    _replace_dock_module_with_error(monkeypatch, error)
+def test_missing_numpy_shows_installer(qtbot, monkeypatch):
+    _replace_dock_module_with_missing_numpy(monkeypatch)
 
     dock = create_dock_widget_class(FakeDockWidget)()
     qtbot.addWidget(dock)
@@ -97,6 +97,35 @@ def test_dependency_failure_shows_numpy_installer(qtbot, monkeypatch, error):
     assert _install_button(widget).text() == "Install NumPy"
 
 
+@pytest.mark.parametrize(
+    "error",
+    [
+        ImportError("Importing the numpy C-extensions failed: incompatible binary"),
+        ImportError(
+            "Error importing numpy: you should not try to import numpy from its source directory; "
+            "please exit the numpy source tree, and relaunch your Python interpreter from there"
+        ),
+        ModuleNotFoundError("No module named 'numpy.typing'", name="numpy.typing"),
+    ],
+)
+def test_broken_numpy_shows_diagnostic_without_installer(qtbot, monkeypatch, error):
+    _replace_dock_module_with_error(monkeypatch, error)
+
+    dock = create_dock_widget_class(FakeDockWidget)()
+    qtbot.addWidget(dock)
+
+    widget = dock.widget()
+    message = widget.findChild(QtWidgets.QLabel).text()
+    assert widget.objectName() == "oklab-dependency-load-failure"
+    assert "NumPy could not be loaded" in message
+    assert "Reinstall or update NumPy" in message
+    assert str(error) not in message
+    assert "source directory" not in message
+    assert "C-extensions" not in message
+    assert "is missing" not in message
+    assert _install_button(widget) is None
+
+
 def test_install_action_requires_confirmation(qtbot, monkeypatch, tmp_path):
     _replace_dock_module_with_missing_numpy(monkeypatch)
     messages = []
@@ -104,7 +133,7 @@ def test_install_action_requires_confirmation(qtbot, monkeypatch, tmp_path):
 
     def reject_install(_parent, _title, message, *args, **kwargs):
         messages.append(message)
-        return QtWidgets.QMessageBox.No
+        return QtWidgets.QMessageBox.StandardButton.No
 
     monkeypatch.setattr(QtWidgets.QMessageBox, "question", reject_install)
     dock = create_dock_widget_class(
@@ -114,7 +143,7 @@ def test_install_action_requires_confirmation(qtbot, monkeypatch, tmp_path):
     )()
     qtbot.addWidget(dock)
 
-    qtbot.mouseClick(_install_button(dock.widget()), QtCore.Qt.LeftButton)
+    qtbot.mouseClick(_install_button(dock.widget()), QtCore.Qt.MouseButton.LeftButton)
 
     assert installer_calls == []
     assert messages
@@ -127,12 +156,12 @@ def test_confirmed_install_runs_installer(qtbot, monkeypatch, tmp_path):
     monkeypatch.setattr(
         QtWidgets.QMessageBox,
         "question",
-        lambda *args, **kwargs: QtWidgets.QMessageBox.Yes,
+        lambda *args, **kwargs: QtWidgets.QMessageBox.StandardButton.Yes,
     )
     monkeypatch.setattr(
         QtWidgets.QMessageBox,
         "information",
-        lambda *args, **kwargs: QtWidgets.QMessageBox.Ok,
+        lambda *args, **kwargs: QtWidgets.QMessageBox.StandardButton.Ok,
     )
     installer_calls = []
 
@@ -149,7 +178,7 @@ def test_confirmed_install_runs_installer(qtbot, monkeypatch, tmp_path):
     status = dock.widget().findChild(QtWidgets.QLabel, "oklab-install-status")
     button = _install_button(dock.widget())
 
-    qtbot.mouseClick(button, QtCore.Qt.LeftButton)
+    qtbot.mouseClick(button, QtCore.Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(
         lambda: bool(installer_calls) and "installed" in status.text().lower(),
@@ -164,14 +193,14 @@ def test_install_exception_is_reported(qtbot, monkeypatch, tmp_path):
     monkeypatch.setattr(
         QtWidgets.QMessageBox,
         "question",
-        lambda *args, **kwargs: QtWidgets.QMessageBox.Yes,
+        lambda *args, **kwargs: QtWidgets.QMessageBox.StandardButton.Yes,
     )
     warnings = []
     monkeypatch.setattr(
         QtWidgets.QMessageBox,
         "warning",
         lambda _parent, _title, message, *args, **kwargs: (
-            warnings.append(message) or QtWidgets.QMessageBox.Ok
+            warnings.append(message) or QtWidgets.QMessageBox.StandardButton.Ok
         ),
     )
 
@@ -186,7 +215,7 @@ def test_install_exception_is_reported(qtbot, monkeypatch, tmp_path):
     qtbot.addWidget(dock)
     button = _install_button(dock.widget())
 
-    qtbot.mouseClick(button, QtCore.Qt.LeftButton)
+    qtbot.mouseClick(button, QtCore.Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(lambda: bool(warnings), timeout=5000)
     assert "network is down" in warnings[0]
@@ -231,8 +260,9 @@ def _replace_dock_module_with_error(monkeypatch, error):
 def _vendor_path(root):
     return (
         root
-        / plugin_module.VENDOR_ROOT_DIRECTORY_NAME
-        / plugin_module.VENDOR_SITE_PACKAGES_DIRECTORY_NAME
+        / dependency_paths.VENDOR_ROOT_DIRECTORY_NAME
+        / dependency_paths.VENDOR_SITE_PACKAGES_DIRECTORY_NAME
+        / dependency_paths.runtime_abi_tag()
     )
 
 
@@ -283,10 +313,6 @@ class FakeKritaApp:
         return "/tmp/fake-krita-app-data"
 
 
-class FakeDockWidgetFactoryBase:
-    DockRight = object()
-
-
 class FakeDockWidgetFactory:
     def __init__(self, identifier, area, widget_class):
         self.identifier = identifier
@@ -296,18 +322,25 @@ class FakeDockWidgetFactory:
 
 class FakeKritaApi:
     def __init__(self, app):
-        self.Krita = FakeKrita(app)
-        self.DockWidget = FakeDockWidget
-        self.DockWidgetFactory = FakeDockWidgetFactory
-        self.DockWidgetFactoryBase = FakeDockWidgetFactoryBase
+        self.app = app
+        self.dock_widget_base = FakeDockWidget
+        self.dock_area = object()
 
+    def application(self):
+        return self.app
 
-class FakeKrita:
-    def __init__(self, app):
-        self._app = app
+    def qt_version(self, application):
+        assert application is self.app
+        return None
 
-    def instance(self):
-        return self._app
+    def app_data_location(self, application):
+        assert application is self.app
+        return application.getAppDataLocation()
+
+    def register_dock_widget(self, application, identifier, dock_widget_type):
+        application.addDockWidgetFactory(
+            FakeDockWidgetFactory(identifier, self.dock_area, dock_widget_type)
+        )
 
 
 class FakeDockWidget(QtWidgets.QDockWidget):

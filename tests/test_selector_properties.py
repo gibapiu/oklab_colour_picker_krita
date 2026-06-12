@@ -143,10 +143,11 @@ def test_p_projection_always_lands_on_slice_inside_gamut(case, first, second):
 
     resolved = model.project_onto_slice(lch)
 
-    # When the slice can host the colour, the projection is on this plane and
-    # inside the gamut leaf - position_for_intent enforces both and resolves it.
-    if resolved is not None:
-        assert model.position_for_intent(resolved, (101.0, 101.0)) is not None
+    # These concrete slice models can host every generated on-plane colour.
+    # position_for_intent enforces that the result stayed on the same plane and
+    # landed inside its gamut leaf.
+    assert resolved is not None
+    assert model.position_for_intent(resolved, (101.0, 101.0)) is not None
 
 
 @settings(max_examples=400, derandomize=True, deadline=None)

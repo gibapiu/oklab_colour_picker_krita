@@ -356,7 +356,7 @@ def _oklab_hue_to_lms_coefficients(a_, b_):
     )
 
 
-# Rounded-up global sRGB OKLCh chroma extent. Keeping this as a literal avoids
-# a dense 256x720 gamut-boundary sweep during plugin import while leaving a
-# small margin above the sampled maximum (~0.3214).
+# Rounded-up global sRGB OKLCh chroma extent.
+# Keeping this as a literal avoids a dense 256x720 gamut-boundary sweep during plugin import
+# while leaving a small margin above the sampled maximum (~0.3214).
 SRGB_MAX_CHROMA = 0.325

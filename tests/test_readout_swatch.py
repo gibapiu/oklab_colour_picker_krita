@@ -1,9 +1,9 @@
 import pytest
 
 pytest.importorskip("pytestqt")
-pytest.importorskip("PyQt5")
+pytestmark = pytest.mark.qt
 
-from PyQt5 import QtGui
+from oklab_colour_picker.infrastructure.qt_facade import QtGui
 
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.ui.readout.swatch import UnifiedSwatch, hex_to_oklab
@@ -45,4 +45,4 @@ def test_hex_editor_emits_changed_value(qtbot):
 
 def _oklab_to_hex(oklab) -> str:
     srgb8 = color_math.quantize_srgb8(color_math.oklab_to_srgb(oklab))
-    return QtGui.QColor(*(int(value) for value in srgb8)).name(QtGui.QColor.HexRgb)
+    return QtGui.QColor(*(int(value) for value in srgb8)).name(QtGui.QColor.NameFormat.HexRgb)

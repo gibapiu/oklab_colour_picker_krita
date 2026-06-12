@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt5 import QtCore, QtGui
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui
 
 from oklab_colour_picker.models import HueLightnessSliceModel
 from oklab_colour_picker.models.geometry import disk_geometry
@@ -32,8 +32,8 @@ class HueLightnessSliceDiskWidget(SelectorWidget):
         cx, cy, radius = geometry
 
         painter.save()
-        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        painter.setBrush(QtCore.Qt.NoBrush)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         pen = QtGui.QPen(QtGui.QColor(255, 255, 255, 90), 1.0)
         pen.setCosmetic(True)
         painter.setPen(pen)
@@ -43,7 +43,7 @@ class HueLightnessSliceDiskWidget(SelectorWidget):
                 continue
             painter.drawEllipse(QtCore.QPointF(cx, cy), ring_radius, ring_radius)
 
-        painter.setPen(QtCore.Qt.NoPen)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.setBrush(QtGui.QColor(255, 255, 255, 160))
         painter.drawEllipse(QtCore.QPointF(cx, cy), 1.5, 1.5)
         painter.restore()

@@ -17,11 +17,7 @@ from oklab_colour_picker.domain.gamut_fallback import (
 
 @dataclass(frozen=True)
 class PresentedColour:
-    """Derived display read model built by ``ColourPresenter`` and read by views.
-
-    Construction is confined to the presenter by an import-discipline test,
-    so fallback policy has a single owner; everywhere else receives and reads it.
-    """
+    """Derived display read model built by ``ColourPresenter`` and read by views."""
 
     intent: ColourIntent
     fallback: FallbackResult

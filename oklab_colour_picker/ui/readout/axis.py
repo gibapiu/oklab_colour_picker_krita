@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from PyQt5 import QtCore, QtGui, QtWidgets
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui, QtWidgets, event_pos
 
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.render import renderers
@@ -29,7 +29,7 @@ class GradientSlider(QtWidgets.QSlider):
     """Horizontal slider with a custom-painted gradient track and hollow handle."""
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(QtCore.Qt.Horizontal, parent)
+        super().__init__(QtCore.Qt.Orientation.Horizontal, parent)
         self.setMinimum(0)
         self.setMaximum(1000)
         self.setSingleStep(1)
@@ -50,7 +50,7 @@ class GradientSlider(QtWidgets.QSlider):
             rgba.shape[1],
             rgba.shape[0],
             bytes_per_line,
-            QtGui.QImage.Format_RGBA8888,
+            QtGui.QImage.Format.Format_RGBA8888,
         )
         self.update()
 
@@ -88,7 +88,7 @@ class GradientSlider(QtWidgets.QSlider):
         if self._track_image is not None:
             painter.drawImage(track_rect, self._track_image)
         painter.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0, 120), 1))
-        painter.setBrush(QtCore.Qt.NoBrush)
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         painter.drawRect(track_rect)
 
         x = self.handle_x_center(track_rect)
@@ -100,22 +100,23 @@ class GradientSlider(QtWidgets.QSlider):
             if inner.width() > 0 and inner.height() > 0:
                 painter.fillRect(inner, self._fallback_colour)
         pen = QtGui.QPen(self._border_ink(x, track_rect), HANDLE_BORDER)
-        pen.setJoinStyle(QtCore.Qt.MiterJoin)
+        pen.setJoinStyle(QtCore.Qt.PenJoinStyle.MiterJoin)
         painter.setPen(pen)
-        painter.setBrush(QtCore.Qt.NoBrush)
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         inset = HANDLE_BORDER / 2
         painter.drawRect(QtCore.QRectF(handle_rect).adjusted(inset, inset, -inset, -inset))
         painter.end()
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
-        if event.button() != QtCore.Qt.LeftButton:
+        if event.button() != QtCore.Qt.MouseButton.LeftButton:
             super().mousePressEvent(event)
             return
+        point = event_pos(event)
         self.setSliderDown(True)
-        self._pressed_handle = self._handle_rect().contains(event.pos())
+        self._pressed_handle = self._handle_rect().contains(point)
         self._moved_since_press = False
         if not self._pressed_handle:
-            self.setValue(self._value_at_x(event.x()))
+            self.setValue(self._value_at_x(point.x()))
         event.accept()
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
@@ -123,15 +124,15 @@ class GradientSlider(QtWidgets.QSlider):
             super().mouseMoveEvent(event)
             return
         self._moved_since_press = True
-        self.setValue(self._value_at_x(event.x()))
+        self.setValue(self._value_at_x(event_pos(event).x()))
         event.accept()
 
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
-        if event.button() != QtCore.Qt.LeftButton or not self.isSliderDown():
+        if event.button() != QtCore.Qt.MouseButton.LeftButton or not self.isSliderDown():
             super().mouseReleaseEvent(event)
             return
         if not (self._pressed_handle and not self._moved_since_press):
-            self.setValue(self._value_at_x(event.x()))
+            self.setValue(self._value_at_x(event_pos(event).x()))
         self.setSliderDown(False)
         self._pressed_handle = False
         self._moved_since_press = False
@@ -148,7 +149,7 @@ class GradientSlider(QtWidgets.QSlider):
         )
 
     def _upside_down(self) -> bool:
-        right_to_left = self.layoutDirection() == QtCore.Qt.RightToLeft
+        right_to_left = self.layoutDirection() == QtCore.Qt.LayoutDirection.RightToLeft
         return right_to_left ^ self.invertedAppearance()
 
     def _handle_rect(self) -> QtCore.QRect:
@@ -187,7 +188,7 @@ class AxisRow(QtWidgets.QWidget):
 
         label_widget = QtWidgets.QLabel(label, self)
         label_widget.setFixedWidth(14)
-        label_widget.setAlignment(QtCore.Qt.AlignCenter)
+        label_widget.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
         self.slider = GradientSlider(self)
         self.spin = QtWidgets.QDoubleSpinBox(self)
@@ -196,15 +197,15 @@ class AxisRow(QtWidgets.QWidget):
         self.spin.setSingleStep(step)
         self.spin.setKeyboardTracking(False)
         self.spin.setFixedWidth(72)
-        self.spin.setAlignment(QtCore.Qt.AlignRight)
+        self.spin.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
 
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
-        layout.setAlignment(QtCore.Qt.AlignVCenter)
-        layout.addWidget(label_widget, 0, QtCore.Qt.AlignVCenter)
-        layout.addWidget(self.slider, 1, QtCore.Qt.AlignVCenter)
-        layout.addWidget(self.spin, 0, QtCore.Qt.AlignVCenter)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(label_widget, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.slider, 1, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.spin, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
 
         self.slider.valueChanged.connect(self._on_slider_changed)
         self.slider.sliderPressed.connect(self._on_slider_pressed)
@@ -280,9 +281,9 @@ class AxisRow(QtWidgets.QWidget):
 
     def eventFilter(self, obj, event):  # type: ignore[override]
         if obj is self.spin:
-            if event.type() == QtCore.QEvent.FocusIn:
+            if event.type() == QtCore.QEvent.Type.FocusIn:
                 self._begin_edit()
-            elif event.type() == QtCore.QEvent.KeyPress and event.key() == QtCore.Qt.Key_Escape:
+            elif event.type() == QtCore.QEvent.Type.KeyPress and event.key() == QtCore.Qt.Key.Key_Escape:
                 if self._edit_start_value is not None:
                     self.set_value(self._edit_start_value)
                 self._cancel_edit()

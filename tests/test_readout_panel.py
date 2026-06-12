@@ -6,10 +6,11 @@ import numpy as np
 import pytest
 
 pytest.importorskip("pytestqt")
-pytest.importorskip("PyQt5")
+pytestmark = pytest.mark.qt
 
-from PyQt5 import QtCore, QtGui, QtWidgets
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtWidgets
 
+from tests.qt_helpers import key_event, send_focus, send_mouse
 from oklab_colour_picker.app.controller import ChangeKind
 from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.domain.colour_state import ColourIntent
@@ -185,8 +186,8 @@ def test_readout_slider_click_jumps_to_clicked_position(qtbot):
     track = slider.track_rect()
     target_x = track.left() + int(round(track.width() * 0.75))
     target = QtCore.QPoint(target_x, track.center().y())
-    _send_mouse(slider, QtCore.QEvent.MouseButtonPress, target)
-    _send_mouse(slider, QtCore.QEvent.MouseButtonRelease, target)
+    send_mouse(slider, "press", target)
+    send_mouse(slider, "release", target)
 
     assert previews
     assert commits
@@ -213,9 +214,9 @@ def test_readout_slider_drag_previews_and_commits_release_position(qtbot):
     middle = QtCore.QPoint(track.left() + int(round(track.width() * 0.50)), track.center().y())
     end = QtCore.QPoint(track.left() + int(round(track.width() * 0.75)), track.center().y())
 
-    _send_mouse(slider, QtCore.QEvent.MouseButtonPress, start)
-    _send_mouse(slider, QtCore.QEvent.MouseMove, middle)
-    _send_mouse(slider, QtCore.QEvent.MouseButtonRelease, end)
+    send_mouse(slider, "press", start)
+    send_mouse(slider, "move", middle)
+    send_mouse(slider, "release", end)
 
     assert len(previews) >= 2
     assert len(commits) == 1
@@ -329,7 +330,7 @@ def test_readout_panel_slider_commit_discards_latched_external_colour(qtbot):
     track = slider.track_rect()
     start = QtCore.QPoint(track.left() + int(round(track.width() * 0.25)), track.center().y())
     end = QtCore.QPoint(track.left() + int(round(track.width() * 0.75)), track.center().y())
-    _send_mouse(slider, QtCore.QEvent.MouseButtonPress, start)
+    send_mouse(slider, "press", start)
     editing_lightness = panel._row_l.value()
 
     _show(panel, external, ChangeKind.EXTERNAL)
@@ -337,7 +338,7 @@ def test_readout_panel_slider_commit_discards_latched_external_colour(qtbot):
 
     received: list[ColourIntent] = []
     panel.committed.connect(lambda colour: received.append(colour))
-    _send_mouse(slider, QtCore.QEvent.MouseButtonRelease, end)
+    send_mouse(slider, "release", end)
 
     assert received[-1].lightness == pytest.approx(0.75, abs=0.02)
 
@@ -350,7 +351,7 @@ def test_readout_panel_spinbox_typing_latches_external_without_clobbering_text(q
     _show(panel, original, ChangeKind.COMMIT)
 
     spin = panel._row_l.spin
-    _send_focus(spin, QtCore.QEvent.FocusIn)
+    send_focus(spin, "in")
     spin.lineEdit().selectAll()
     spin.lineEdit().setText("0.750")
     _show(panel, external, ChangeKind.EXTERNAL)
@@ -375,7 +376,7 @@ def test_readout_panel_spinbox_cancel_applies_latched_external_colour(qtbot):
     _show(panel, original, ChangeKind.COMMIT)
 
     spin = panel._row_l.spin
-    _send_focus(spin, QtCore.QEvent.FocusIn)
+    send_focus(spin, "in")
     _show(panel, external, ChangeKind.EXTERNAL)
     spin.editingFinished.emit()
 
@@ -392,11 +393,11 @@ def test_readout_panel_spinbox_escape_applies_latch_without_spurious_commit(qtbo
     panel.committed.connect(lambda colour: received.append(_paint_oklab(colour)))
 
     spin = panel._row_l.spin
-    _send_focus(spin, QtCore.QEvent.FocusIn)
+    send_focus(spin, "in")
     spin.lineEdit().selectAll()
     spin.lineEdit().setText("0.750")
     _show(panel, external, ChangeKind.EXTERNAL)
-    escape = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_Escape, QtCore.Qt.NoModifier)
+    escape = key_event("press", "Escape")
     QtWidgets.QApplication.sendEvent(spin, escape)
     spin.editingFinished.emit()
 
@@ -417,13 +418,13 @@ def test_readout_panel_zero_delta_slider_press_applies_latched_external_on_relea
     slider = panel._row_l.slider
     track = slider.track_rect()
     target = QtCore.QPoint(slider.handle_x_center(track), track.center().y())
-    _send_mouse(slider, QtCore.QEvent.MouseButtonPress, target)
+    send_mouse(slider, "press", target)
     original_lightness = panel._row_l.value()
 
     _show(panel, external, ChangeKind.EXTERNAL)
     assert panel._row_l.value() == pytest.approx(original_lightness)
 
-    _send_mouse(slider, QtCore.QEvent.MouseButtonRelease, target)
+    send_mouse(slider, "release", target)
 
     _assert_rows_match(panel, external)
 
@@ -471,25 +472,6 @@ def test_readout_panel_uses_shared_fallback_rgb_for_swatch_and_handles(qtbot):
         fallback = row.slider._fallback_colour
         assert fallback is not None
         assert (fallback.red(), fallback.green(), fallback.blue()) == fallback_rgb
-
-
-def _send_mouse(widget, event_type, position):
-    button = QtCore.Qt.LeftButton if event_type != QtCore.QEvent.MouseMove else QtCore.Qt.NoButton
-    buttons = QtCore.Qt.NoButton if event_type == QtCore.QEvent.MouseButtonRelease else QtCore.Qt.LeftButton
-    event = QtGui.QMouseEvent(
-        event_type,
-        QtCore.QPointF(position),
-        button,
-        buttons,
-        QtCore.Qt.NoModifier,
-    )
-    QtWidgets.QApplication.sendEvent(widget, event)
-    assert event.isAccepted()
-
-
-def _send_focus(widget, event_type):
-    event = QtGui.QFocusEvent(event_type, QtCore.Qt.OtherFocusReason)
-    QtWidgets.QApplication.sendEvent(widget, event)
 
 
 def _assert_rows_match(panel: ReadoutPanel, colour) -> None:

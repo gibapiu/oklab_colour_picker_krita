@@ -118,6 +118,20 @@ A few rules the rest of the code leans on:
 The readout panel runs the same idea with two states: `IDLE` and `EDITING`. While editing, any colour pushed from elsewhere is held aside (not applied). If you commit, your edit wins. If you cancel, the held colour comes back.
 `ReadoutPresenter` separately maps the chosen `PresentedColour`, active L/C/H values, and revert target into one immutable display state; the Qt panel only applies that state to its controls.
 
+### 2.5 Krita 5 and 6 support
+
+Krita 6 (aka 5.3) introduced several breaking changes to Python plugin support:
+a different major PyQt version and a partially incompatible Krita API. When both
+versions run in parallel, their NumPy builds may also be incompatible.
+
+Three small boundaries keep those differences out of the rest of the plugin:
+
+- `krita_facade.py` presents one plugin-bootstrap API over both Krita versions, including dock registration and enum differences.
+- `qt_facade.py` presents one Qt API over PyQt5 and PyQt6, including binding selection and event differences.
+- `dependency_paths.py` isolates private binary dependencies by Python ABI, so Krita runtimes that share app data cannot load each other's NumPy extensions.
+
+Everything downstream uses those stable interfaces and stays indifferent to which Krita and Qt versions are running.
+
 ---
 
 ## 3. UX decisions
@@ -159,5 +173,6 @@ Choices made to keep the picker fast under continuous drag:
 - **Write self-documenting code.** Let names do the talking. Add a comment only when the *why* isn't obvious from reading.
 - **Test first, test deep.** Cover every layer directly. Run the state machine against a fake context - no Qt. Run widget and dock tests offscreen with fake clocks and timers - no `sleep`, no flake. Use property tests (`hypothesis`, fixed seed) for round-trips, echo idempotence, indicator purity, and anchor lifetimes across random gestures.
 - **Keep contracts clean between layers.** Make the selector model a full abstract base class - no duck typing. Reach Krita through three named ports: `ForegroundAdapter`, `CommitScheduler`, `ForegroundTimer`. Check import rules with a test, not with trust.
+- **Keep host differences at the boundary.** Krita and Qt version details stay behind their dedicated interfaces.
 - **Prefer simple over clever.** One controller. One source of truth. One state machine per view family. No source tags. No skip-originator logic.
 - **Use what the platform gives.** Reach for Krita's `ManagedColor` for profile conversion, NumPy for pixel maths, and Qt's `QImage`, `QTimer`, and signals for the UI. Don't rewrite what already works.

@@ -5,9 +5,8 @@ from pathlib import Path
 
 
 KRITA_IMPORT_ALLOWED = {
-    Path("oklab_colour_picker/plugin.py"),
-    Path("oklab_colour_picker/app/controller.py"),
     Path("oklab_colour_picker/infrastructure/krita_adapter.py"),
+    Path("oklab_colour_picker/infrastructure/krita_facade.py"),
 }
 
 PACKAGE_LAYER_DIRECTORIES = (
@@ -24,6 +23,20 @@ PACKAGE_ROOT_MODULES = {
     Path("oklab_colour_picker/plugin.py"),
 }
 
+QT_FACADE_MODULE = "oklab_colour_picker.infrastructure.qt_facade"
+
+QT_BINDING_MODULE_PREFIXES = (
+    "PyQt5",
+    "PyQt6",
+    "PySide",
+    "PySide2",
+    "PySide6",
+)
+
+QT_BINDING_IMPORT_ALLOWED = {
+    Path("oklab_colour_picker/infrastructure/qt_facade.py"),
+}
+
 PURE_LAYER_DIRECTORIES = (
     Path("oklab_colour_picker/domain"),
     Path("oklab_colour_picker/models"),
@@ -35,15 +48,9 @@ LOWER_LAYER_DIRECTORIES = (
     Path("oklab_colour_picker/app"),
 )
 
-QT_OR_KRITA_MODULE_PREFIXES = (
-    "PyQt5",
-    "PyQt6",
-    "PySide",
-    "krita",
-)
+QT_OR_KRITA_MODULE_PREFIXES = (*QT_BINDING_MODULE_PREFIXES, "krita")
 
 SET_FOREGROUND_ALLOWED = {
-    Path("oklab_colour_picker/app/controller.py"),
     Path("oklab_colour_picker/infrastructure/krita_adapter.py"),
 }
 
@@ -56,6 +63,11 @@ PRESENTED_COLOUR_CONSTRUCTION_ALLOWED = {
 UI_LAYER_MODULE_PREFIXES = (
     "oklab_colour_picker.plugin",
     "oklab_colour_picker.ui",
+)
+
+LOWER_LAYER_FORBIDDEN_MODULE_PREFIXES = (
+    *UI_LAYER_MODULE_PREFIXES,
+    QT_FACADE_MODULE,
 )
 
 
