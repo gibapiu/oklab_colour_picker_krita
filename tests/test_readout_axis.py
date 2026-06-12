@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 pytest.importorskip("pytestqt")
+pytestmark = pytest.mark.qt
 
 from oklab_colour_picker.infrastructure.qt_facade import QtWidgets
 
