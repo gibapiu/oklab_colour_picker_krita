@@ -1,0 +1,30 @@
+name: Contributors
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve commit range
+        id: range
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "range=$HEAD" >> "$GITHUB_OUTPUT"
+          else
+            echo "range=$BASE..$HEAD" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify commit authorship
+        run: python scripts/checks/contributors.py "${{ steps.range.outputs.range }}"
