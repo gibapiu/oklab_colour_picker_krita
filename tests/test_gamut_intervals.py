@@ -84,7 +84,7 @@ def test_fallback_resolves_blue_gap_and_preserves_reentered_blue():
     assert strategy.resolve(valid).resolved is valid
 
 
-@pytest.mark.parametrize("hue_degrees", [0, 180, 264.052, 264.1, 264.207587, 264.21])
+@pytest.mark.parametrize("hue_degrees", [0, 90, 180, 264.052, 264.1, 264.207587, 264.21])
 @pytest.mark.parametrize("axis", ["chroma", "lightness"])
 def test_intervals_agree_with_independent_dense_rgb_samples(hue_degrees, axis):
     hue = math.radians(hue_degrees)

@@ -34,7 +34,7 @@ _hue_cusp_table_cache: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
 
 @dataclass(frozen=True)
 class HueLightnessSliceModel(SelectorModel):
-    """Hue/lightness selector at fixed chroma."""
+    """Hue/lightness disk at fixed chroma; centre L=1, rim L=0."""
 
     chroma: float
     achromatic_indicator_hue: float | None = None
@@ -171,7 +171,7 @@ class HueLightnessSliceModel(SelectorModel):
 
 
 def _nearest_hue_reaching_chroma(chroma: float, hue: float) -> tuple[float, float] | None:
-    """Return a valid point at the nearest sampled hue."""
+    """Return (L, hue), or None if no sampled hue passes the gamut check."""
 
     hues, cusp_lightness, cusp_chroma = _hue_cusp_table()
     reaches = cusp_chroma >= chroma - CHROMA_EPSILON

@@ -31,7 +31,7 @@ LIGHTNESS_EPSILON = 1e-9
 
 @dataclass(frozen=True)
 class LightnessSliceModel(SelectorModel):
-    """Circular hue/chroma selector at fixed lightness."""
+    """Hue/chroma disk at fixed L; radius spans C=0 to SRGB_MAX_CHROMA."""
 
     lightness: float
 

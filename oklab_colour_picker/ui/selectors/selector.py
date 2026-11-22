@@ -320,23 +320,31 @@ class SelectorWidget(QtWidgets.QWidget):
             painter.setPen(_ring_pen(colour, width, solid=solid))
             painter.drawEllipse(center, 5.0, 5.0)
 
-    def _selector_image(self) -> QtGui.QImage:
+    def _selector_rgba(self) -> np.ndarray:
         key = (self._model, self.width(), self.height())
-        if self._image_cache_key == key and self._image_cache is not None:
-            return self._image_cache
-        rgba = renderers.render_rgba(self._model, (self.width(), self.height()))
-        bytes_per_line = int(rgba.strides[0])
-        image = QtGui.QImage(
-            rgba.data,
-            self.width(),
-            self.height(),
-            bytes_per_line,
-            QtGui.QImage.Format.Format_RGBA8888,
-        )
-        self._image_cache_key = key
-        self._image_cache_buffer = rgba
-        self._image_cache = image
-        return image
+        if self._image_cache_key != key or self._image_cache_buffer is None:
+            rgba = renderers.render_rgba(self._model, (self.width(), self.height()))
+            self._image_cache_key = key
+            self._image_cache_buffer = rgba
+            self._image_cache = None
+        return self._image_cache_buffer
+
+    def _selector_image(self) -> QtGui.QImage:
+        rgba = self._selector_rgba()
+        if self._image_cache is None:
+            self._image_cache = QtGui.QImage(
+                rgba.data,
+                self.width(),
+                self.height(),
+                int(rgba.strides[0]),
+                QtGui.QImage.Format.Format_RGBA8888,
+            )
+        return self._image_cache
+
+    def _selector_alpha_mask(self) -> np.ndarray:
+        """Return the selector's opaque-pixel mask."""
+
+        return self._selector_rgba()[..., 3] != 0
 
     def _clear_image_cache(self) -> None:
         self._image_cache_key = None

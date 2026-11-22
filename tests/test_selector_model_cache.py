@@ -6,6 +6,7 @@ from oklab_colour_picker.app.selector_model_cache import (
     SelectorMode,
     SelectorModelCache,
 )
+from oklab_colour_picker.domain import color_math
 from oklab_colour_picker.domain.colour_state import ColourIntent
 from oklab_colour_picker.models import (
     HueLightnessSliceModel,
@@ -134,23 +135,13 @@ def test_reused_achromatic_model_preserves_explicit_hue_intent():
 
 
 @pytest.mark.parametrize("mode", list(SelectorMode))
-def test_fallback_strategy_projects_onto_the_same_cached_slice(mode):
+def test_fallback_stays_on_the_current_selector_slice(mode):
     cache = SelectorModelCache()
-    intent = ColourIntent.from_lch(0.5, 0.08, 1.0)
-
-    strategy = cache.fallback_strategy_for(mode, intent)
-
-    # The strategy's plane is the very model the selector draws on, so the
-    # dashed ring and the swatch can never project onto different slices.
-    assert strategy.projection is cache.model_for(mode, intent)
-
-
-def test_fallback_strategy_follows_the_slice_when_its_fixed_coordinate_changes():
-    cache = SelectorModelCache()
-    mode = SelectorMode.LIGHTNESS_CHROMA_SLICE
-
-    first = cache.fallback_strategy_for(mode, ColourIntent.from_lch(0.5, 0.08, 1.0))
-    second = cache.fallback_strategy_for(mode, ColourIntent.from_lch(0.5, 0.08, 2.5))
-
-    assert first.projection is not second.projection
-    assert second.projection is cache.model_for(mode, ColourIntent.from_lch(0.5, 0.08, 2.5))
+    for lch in ((0.4, 0.27, 1.0), (0.8, 0.29, 2.5)):
+        intent = ColourIntent.from_lch(*lch)
+        model = cache.model_for(mode, intent)
+        result = cache.fallback_strategy_for(mode, intent).resolve(intent)
+        assert not result.in_gamut
+        assert model.position_for_intent(result.resolved.selector_lch, (101, 101)) is not None
+        rgb = color_math.oklab_to_srgb(result.resolved.paint_oklab)
+        assert all(-1e-6 <= component <= 1 + 1e-6 for component in rgb)

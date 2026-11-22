@@ -23,7 +23,8 @@ from oklab_colour_picker.app.controller import (
     normalize_oklab_for_krita,
 )
 from oklab_colour_picker.ui.dock import ColourPickerDockPanel
-from oklab_colour_picker.ui.selectors import HueLightnessSliceDiskWidget
+from oklab_colour_picker.ui.readout.panel import ReadoutPanel
+from oklab_colour_picker.ui.selectors import HueLightnessSliceDiskWidget, SelectorWidget
 from tests.helpers import presented_colour
 
 
@@ -59,10 +60,10 @@ def test_dock_panel_initializes_only_active_selector_view(qtbot):
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
 
-    assert tuple(panel._selectors) == (SelectorMode.LIGHTNESS_SLICE,)
-    assert panel._tabs.count() == len(SelectorMode)
-    assert panel._tabs.widget(0) is panel.selector_for_mode(SelectorMode.LIGHTNESS_SLICE)
-    assert panel._tabs.widget(1).objectName() == "hue-lightness-slice-selector-placeholder"
+    assert len(panel.findChildren(SelectorWidget)) == 1
+    tabs = panel.findChild(QtWidgets.QTabWidget)
+    assert tabs.count() == len(SelectorMode)
+    assert tabs.widget(0) is panel.active_selector
 
 
 def test_dock_panel_uses_current_foreground_on_construction(qtbot):
@@ -114,7 +115,6 @@ def test_controller_presents_once_and_dock_fans_same_snapshot_to_views(qtbot, mo
     )
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
-    _ = panel.selector_widgets
 
     view_calls = []
 
@@ -127,9 +127,9 @@ def test_controller_presents_once_and_dock_fans_same_snapshot_to_views(qtbot, mo
 
         monkeypatch.setattr(view, "show_colour", record)
 
-    spy_view("readout", panel._readout_panel)
-    for mode, widget in panel._selectors.items():
-        spy_view(mode.value, widget)
+    spy_view("readout", panel.findChild(ReadoutPanel))
+    for mode in SelectorMode:
+        spy_view(mode.value, panel.selector_for_mode(mode))
 
     intent = ColourIntent.from_lch(0.52, 0.04, math.radians(135.0))
     controller.set_preview_colour(intent)

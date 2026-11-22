@@ -20,6 +20,27 @@ class ContourDisk(LightnessSliceDiskWidget):
         pass
 
 
+class RectangularSlice(LightnessSliceModel):
+    def colors_at_positions(self, x, y, size):
+        x, y = np.broadcast_arrays(x, y)
+        colours = np.zeros(x.shape + (3,))
+        colours[..., 0] = self.lightness
+        return colours, (x >= 10) & (x < size[0] - 10) & (y >= 10) & (y < size[1] - 10)
+
+
+@pytest.mark.parametrize("lightness", [0.25, 0.9])
+def test_outline_has_light_and_dark_bands_inside_the_gamut(qtbot, lightness):
+    widget = ContourDisk(RectangularSlice(lightness))
+    widget.resize(81, 81)
+    qtbot.addWidget(widget)
+    pixels = render_pixels(widget)
+    light_band = pixels[40, 10, :3].mean()
+    dark_band = pixels[40, 11, :3].mean()
+    interior = pixels[40, 13, :3].mean()
+    assert light_band > dark_band + 30
+    assert dark_band < interior - 10
+
+
 @pytest.mark.parametrize("widget_type, model, guide", [
     (LightnessSliceDiskWidget, LightnessSliceModel(0.5), (46, 40)),
     (HueLightnessSliceDiskWidget, HueLightnessSliceModel(0.03), (60, 40)),
