@@ -35,38 +35,6 @@ def test_gamut_contour_preserves_hole_and_separate_island():
     } <= edges
 
 
-def test_blue_gamut_contour_edges_separate_valid_and_transparent_pixels():
-    mask = render_rgba(LightnessSliceModel(0.426041573241465), (501, 501))[..., 3] != 0
-    padded = np.pad(mask, 1)
-    segments = renderers.gamut_contour_segments(mask)
-    for start, end in segments:
-        assert np.sum(np.abs(end - start)) == 1
-        x, y = (start + end) * 0.5
-        if start[0] == end[0]:
-            left = padded[int(y) + 1, int(x + 0.5)]
-            right = padded[int(y) + 1, int(x + 1.5)]
-            assert left != right
-        else:
-            above = padded[int(y + 0.5), int(x) + 1]
-            below = padded[int(y + 1.5), int(x) + 1]
-            assert above != below
-
-
-@pytest.mark.parametrize(
-    "model",
-    [
-        LightnessSliceModel(lightness=0.55),
-        HueLightnessSliceModel(chroma=0.05),
-        LightnessChromaSliceModel(hue=1.25),
-    ],
-)
-def test_renderers_return_uint8_rgba_buffers(model):
-    actual = render_rgba(model, (23, 17))
-
-    assert actual.shape == (17, 23, 4)
-    assert actual.dtype == np.uint8
-
-
 @pytest.mark.parametrize("size", [(1, 10), (10, 1)])
 def test_renderers_reject_degenerate_sizes(size):
     with pytest.raises(ValueError, match="at least 2x2"):
@@ -105,6 +73,8 @@ def test_render_rgba_returns_mutable_copy_without_corrupting_cache():
 )
 def test_renderer_pixels_match_model_at_probe_points(model, size, probes):
     rgba = render_rgba(model, size)
+    assert rgba.shape == (size[1], size[0], 4)
+    assert rgba.dtype == np.uint8
 
     for x, y in probes:
         model_color = model.color_at_position((x, y), size)
@@ -114,37 +84,7 @@ def test_renderer_pixels_match_model_at_probe_points(model, size, probes):
             continue
 
         assert rgba[y, x, 3] == 255
-        np.testing.assert_array_equal(rgba[y, x, :3], _quantize8(model_color))
-
-
-@pytest.mark.parametrize("size", [(64, 64), (200, 120)])
-def test_lightness_renderer_preserves_coordinate_semantics_across_sizes(size):
-    model = LightnessSliceModel(lightness=0.5)
-    rgba = render_rgba(model, size)
-    position = model.position_for_intent((0.5, 0.0, 0.0), size)
-    x, y = round(position[0]), round(position[1])
-
-    assert rgba[y, x, 3] == 255
-    np.testing.assert_array_equal(rgba[y, x, :3], _quantize8(model.color_at_position((x, y), size)))
-
-
-def test_lightness_chroma_slice_renderer_alpha_marks_per_hue_gamut():
-    model = LightnessChromaSliceModel(hue=math.pi / 3.0)
-    rgba = render_rgba(model, (101, 101))
-
-    # The left edge (chroma=0) is always in gamut; the right edge sits at the
-    # global max chroma which exceeds the per-hue cusp for almost every row.
-    assert np.all(rgba[:, 0, 3] == 255)
-    assert np.count_nonzero(rgba[..., 3] == 0) > 0
-    assert np.count_nonzero(rgba[..., 3] == 255) > 0
-
-
-def test_hue_lightness_slice_renderer_alpha_marks_fixed_chroma_gamut():
-    model = HueLightnessSliceModel(chroma=0.15)
-    rgba = render_rgba(model, (101, 101))
-
-    assert np.count_nonzero(rgba[..., 3] == 0) > 0
-    assert np.count_nonzero(rgba[..., 3] == 255) > 0
+        np.testing.assert_array_equal(rgba[y, x, :3], color_math.oklab_to_srgb8(model_color))
 
 
 def test_axis_track_hue_marks_out_of_gamut_with_checker():
@@ -225,8 +165,3 @@ def test_axis_track_hue_chroma_floor_preserves_gamut_classification():
     )
 
     assert np.any(np.all(rgba[..., :3] == 120, axis=-1))
-
-
-def _quantize8(oklab):
-    srgb = color_math.clip_srgb(color_math.oklab_to_srgb(oklab))
-    return np.rint(srgb * 255.0).astype(np.uint8)

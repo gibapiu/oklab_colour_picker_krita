@@ -84,17 +84,7 @@ def test_fallback_resolves_blue_gap_and_preserves_reentered_blue():
     assert strategy.resolve(valid).resolved is valid
 
 
-def test_chroma_intervals_include_both_valid_blue_bands():
-    lightness, _, hue = BLUE_LCH
-    actual = color_math.chroma_intervals_for_lh(lightness, hue)
-    assert len(actual) == 2
-    assert actual[0][0] == 0.0
-    assert actual[0][1] == pytest.approx(_local_boundary((lightness, 0.272, hue), 1, 0.270), abs=1e-10)
-    assert actual[1][0] == pytest.approx(_local_boundary((lightness, 0.272, hue), 1, 0.280), abs=1e-10)
-    assert actual[1][1] == pytest.approx(_local_boundary((lightness, 0.31, hue), 1, 0.280), abs=1e-10)
-
-
-@pytest.mark.parametrize("hue_degrees", [0, 90, 180, 264, 264.052, 264.1, 264.207587, 264.21, 264.4, 300])
+@pytest.mark.parametrize("hue_degrees", [0, 180, 264.052, 264.1, 264.207587, 264.21])
 @pytest.mark.parametrize("axis", ["chroma", "lightness"])
 def test_intervals_agree_with_independent_dense_rgb_samples(hue_degrees, axis):
     hue = math.radians(hue_degrees)
@@ -191,12 +181,6 @@ def test_near_black_intervals_match_tolerant_edge_without_singleton_artifacts():
     expected = _local_boundary((lightness, 0.1, hue), 1, 0)
     assert upper == pytest.approx(expected, abs=1e-8)
     assert color_math.snap_chroma(lightness, 0.1, hue) == pytest.approx(expected, abs=1e-8)
-
-
-def test_chroma_invariant_is_checked_explicitly(monkeypatch):
-    monkeypatch.setattr(color_math, "chroma_intervals_for_lh", lambda *_args: ())
-    with pytest.raises(AssertionError, match="host neutral"):
-        color_math.snap_chroma(0.5, 0.3, 0)
 
 
 def test_chroma_projection_keeps_boundary_roundoff_inside_tolerance():

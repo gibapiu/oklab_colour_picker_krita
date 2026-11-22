@@ -6,7 +6,9 @@ strings: mouse ``"press"|"move"|"release"``, key/focus per the maps below.
 
 from __future__ import annotations
 
-from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui
+import numpy as np
+
+from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui, QtWidgets
 
 
 _NO_MODIFIER = QtCore.Qt.KeyboardModifier.NoModifier
@@ -70,3 +72,17 @@ def send_focus(widget, kind: str) -> None:
     """Dispatch a focus ``"in"|"out"`` event to ``widget``."""
 
     QtCore.QCoreApplication.sendEvent(widget, focus_event(kind))
+
+
+def render_pixels(widget, device_ratio=1):
+    image = QtGui.QImage(
+        widget.width() * device_ratio,
+        widget.height() * device_ratio,
+        QtGui.QImage.Format.Format_RGBA8888,
+    )
+    image.setDevicePixelRatio(device_ratio)
+    image.fill(0)
+    widget.render(image, flags=QtWidgets.QWidget.RenderFlag.DrawChildren)
+    pixels = image.bits()
+    pixels.setsize(image.sizeInBytes())
+    return np.frombuffer(pixels, dtype=np.uint8).reshape(image.height(), image.width(), 4).copy()

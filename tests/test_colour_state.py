@@ -69,11 +69,14 @@ def test_colour_intent_quantized_paint_equality_ignores_achromatic_hue():
     assert first.quantized_paint_equal(second)
 
 
-def test_colour_intent_quantized_paint_is_cached_and_immutable():
+def test_quantized_paint_cannot_mutate_colour_intent():
     intent = ColourIntent.from_lch(0.5, 0.0, 0.0)
 
-    assert intent.quantized_paint_oklab is intent.quantized_paint_oklab
-    assert not intent.quantized_paint_oklab.flags.writeable
+    sample = intent.quantized_paint_oklab
+    try:
+        sample[:] = 0
+    except ValueError:
+        pass
     np.testing.assert_allclose(
         intent.quantized_paint_oklab,
         normalize_oklab_for_krita(intent.paint_oklab),

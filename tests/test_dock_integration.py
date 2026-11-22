@@ -32,7 +32,7 @@ def _present(colour):
 
 
 def test_dock_panel_constructs_all_selector_views_and_switches_modes(qtbot):
-    controller = FakeController()
+    controller = RecordingController()
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
 
@@ -55,7 +55,7 @@ def test_dock_panel_constructs_all_selector_views_and_switches_modes(qtbot):
 
 
 def test_dock_panel_initializes_only_active_selector_view(qtbot):
-    controller = FakeController()
+    controller = RecordingController()
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
 
@@ -67,7 +67,7 @@ def test_dock_panel_initializes_only_active_selector_view(qtbot):
 
 def test_dock_panel_uses_current_foreground_on_construction(qtbot):
     colour = color_math.oklch_to_oklab([0.58, 0.07, math.pi / 3.0])
-    controller = FakeController(selected_colour=colour)
+    controller = RecordingController(selected_colour=colour)
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
 
@@ -78,7 +78,7 @@ def test_dock_panel_uses_current_foreground_on_construction(qtbot):
 
 def test_dock_panel_construction_does_not_synchronously_resync_foreground(qtbot):
     colour = color_math.oklch_to_oklab([0.58, 0.07, math.pi / 3.0])
-    controller = FakeController(selected_colour=colour)
+    controller = RecordingController(selected_colour=colour)
 
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
@@ -87,7 +87,7 @@ def test_dock_panel_construction_does_not_synchronously_resync_foreground(qtbot)
 
 
 def test_selector_signals_update_controller_and_sibling_indicators(qtbot):
-    controller = FakeController()
+    controller = RecordingController()
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
     panel.set_mode(SelectorMode.LIGHTNESS_CHROMA_SLICE)
@@ -170,7 +170,7 @@ def test_active_slice_coordinate_change_refreshes_the_fallback_plane(qtbot):
 
 
 def test_selector_widget_signals_emit_intent_not_presentation(qtbot):
-    controller = FakeController()
+    controller = RecordingController()
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
     panel.set_mode(SelectorMode.LIGHTNESS_CHROMA_SLICE)
@@ -239,7 +239,7 @@ def test_real_controller_achromatic_hue_lightness_commit_keeps_emitter_pinned(qt
 
 def test_achromatic_hue_slider_moves_hue_lightness_selector_indicator(qtbot):
     grey = color_math.oklch_to_oklab([0.5, 0.0, 0.0])
-    controller = FakeController(selected_colour=grey)
+    controller = RecordingController(selected_colour=grey)
     panel = ColourPickerDockPanel(controller)
     panel.resize(360, 320)
     qtbot.addWidget(panel)
@@ -283,7 +283,7 @@ def test_seeded_chromatic_hue_positions_later_achromatic_hue_lightness_indicator
     hue = math.radians(210.0)
     seed = color_math.oklch_to_oklab([0.5, 0.05, hue])
     grey = color_math.oklch_to_oklab([0.5, 0.0, 0.0])
-    controller = FakeController(selected_colour=seed)
+    controller = RecordingController(selected_colour=seed)
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
     panel.set_mode(SelectorMode.HUE_LIGHTNESS_SLICE)
@@ -303,7 +303,7 @@ def test_seeded_chromatic_hue_positions_later_achromatic_hue_lightness_indicator
 
 def test_achromatic_hue_intent_survives_chroma_round_trip(qtbot):
     grey = color_math.oklch_to_oklab([0.5, 0.0, 0.0])
-    controller = FakeController(selected_colour=grey)
+    controller = RecordingController(selected_colour=grey)
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
     panel.set_mode(SelectorMode.HUE_LIGHTNESS_SLICE)
@@ -335,7 +335,7 @@ def test_achromatic_hue_intent_survives_chroma_round_trip(qtbot):
 
 
 def test_preview_replaces_only_models_whose_fixed_coordinate_changes(qtbot):
-    controller = FakeController()
+    controller = RecordingController()
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
     for mode in SelectorMode:
@@ -367,7 +367,7 @@ def test_achromatic_hue_change_rebuilds_lightness_chroma_slice(qtbot):
     # collapsed achromatic hue to 0. The slice is parameterized by hue,
     # so a hue change must rebuild the model regardless of chroma.
     grey = color_math.oklch_to_oklab([0.5, 0.0, 0.0])
-    controller = FakeController(selected_colour=grey)
+    controller = RecordingController(selected_colour=grey)
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
     panel.set_mode(SelectorMode.LIGHTNESS_CHROMA_SLICE)
@@ -375,14 +375,14 @@ def test_achromatic_hue_change_rebuilds_lightness_chroma_slice(qtbot):
     initial_hue = active.model.hue
 
     new_hue = math.radians(210.0)
-    controller.emit_foreground(ColourIntent.from_lch(0.5, 0.0, new_hue))
+    controller.set_preview_colour(ColourIntent.from_lch(0.5, 0.0, new_hue))
 
     assert new_hue != pytest.approx(initial_hue)
     assert active.model.hue == pytest.approx(new_hue)
 
 
 def test_external_foreground_sync_updates_all_selector_views(qtbot):
-    controller = FakeController()
+    controller = RecordingController()
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
     panel.resize(120, 80)
@@ -396,17 +396,17 @@ def test_external_foreground_sync_updates_all_selector_views(qtbot):
 
 
 def test_lazy_selector_uses_latest_colour_when_first_built(qtbot):
-    controller = FakeController()
+    controller = RecordingController()
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
     colour = color_math.oklch_to_oklab([0.42, 0.06, math.pi / 4.0])
 
     panel.set_selected_colour(colour)
-    assert SelectorMode.LIGHTNESS_CHROMA_SLICE not in panel._selectors
 
     widget = panel.selector_for_mode(SelectorMode.LIGHTNESS_CHROMA_SLICE)
 
-    np.testing.assert_allclose(widget.selected_colour, colour)
+    np.testing.assert_allclose(widget.selected_colour, normalize_oklab_for_krita(colour))
+    assert widget.colour.selector_lch == pytest.approx(color_math.oklab_to_oklch(colour))
     assert widget.indicator_position() is not None
 
 
@@ -414,7 +414,7 @@ def test_lazy_selector_uses_latest_colour_when_first_built(qtbot):
 def test_commit_signal_preserves_previous_swatch(qtbot, source):
     colour_a = color_math.oklch_to_oklab([0.50, 0.05, math.pi / 6.0])
     colour_b = color_math.oklch_to_oklab([0.60, 0.08, math.pi / 3.0])
-    controller = FakeController(selected_colour=colour_a)
+    controller = RecordingController(selected_colour=colour_a)
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
 
@@ -498,7 +498,7 @@ def test_cold_start_poll_seeds_readout_revert_target_not_placeholder(qtbot):
 
 
 def test_show_event_forces_a_foreground_sync_independent_of_the_poll(qtbot):
-    controller = FakeController()
+    controller = RecordingController()
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
     sync_count = controller.sync_count
@@ -531,7 +531,7 @@ def test_indicator_survives_slider_commit_on_active_selector(qtbot):
 
 def test_achromatic_hue_lightness_pick_carries_click_hue_to_controller(qtbot):
     seed = ColourIntent.from_lch(0.5, 0.0, math.radians(10.0))
-    controller = FakeController(selected_colour=seed)
+    controller = RecordingController(selected_colour=seed)
     panel = ColourPickerDockPanel(controller)
     qtbot.addWidget(panel)
     panel.set_mode(SelectorMode.HUE_LIGHTNESS_SLICE)
@@ -557,75 +557,33 @@ def _assert_readout_matches(panel: ColourPickerDockPanel, colour) -> None:
     assert readout._row_h.value() == pytest.approx(math.degrees(hue), abs=0.1)
 
 
-class FakeController:
+class RecordingController(ColourPickerController):
     def __init__(self, selected_colour=None):
         self.previews = []
         self.commits = []
-        self._foreground_listeners = []
-        self._selected_intent = None if selected_colour is None else ColourIntent.from_value(selected_colour)
         self.sync_count = 0
-        self._presenter = default_colour_presenter()
-        self._fallback_strategy_provider = None
-
-    @property
-    def selected_colour(self):
-        return None if self._selected_intent is None else self._selected_intent.paint_oklab
-
-    @property
-    def selected_intent(self):
-        return self._selected_intent
+        foreground = selected_colour.paint_oklab if isinstance(selected_colour, ColourIntent) else selected_colour
+        self.adapter = NormalizingForegroundAdapter(foreground)
+        super().__init__(self.adapter, scheduler=ImmediateTestScheduler())
+        if isinstance(selected_colour, ColourIntent):
+            self.set_preview_colour(selected_colour)
 
     def set_preview_colour(self, colour):
-        intent = None if colour is None else self._intent_from_value(colour)
-        self.previews.append(intent)
-        if colour is not None:
-            self._broadcast(intent, ChangeKind.PREVIEW)
+        super().set_preview_colour(colour)
+        self.previews.append(self.selected_intent)
 
     def request_foreground_commit(self, colour):
-        intent = None if colour is None else self._intent_from_value(colour)
-        self.commits.append(intent)
-        if colour is not None:
-            self._broadcast(intent, ChangeKind.COMMIT)
+        super().request_foreground_commit(colour)
+        self.commits.append(self.selected_intent)
 
     def sync_external_foreground(self, *, force=False):
         self.sync_count += 1
-        self.last_force_sync = bool(force)
-        return False
-
-    def add_colour_listener(self, listener):
-        self._foreground_listeners.append(listener)
-        if self._selected_intent is not None:
-            listener(ColourSnapshot(self._present(self._selected_intent), ChangeKind.INITIAL))
-
-    def remove_colour_listener(self, listener):
-        self._foreground_listeners.remove(listener)
-
-    def set_fallback_strategy_provider(self, provider):
-        self._fallback_strategy_provider = provider
-
-    def reproject(self):
-        if self._selected_intent is not None:
-            self._broadcast(self._selected_intent, ChangeKind.PREVIEW)
-
-    def _present(self, intent):
-        if self._fallback_strategy_provider is None:
-            return self._presenter.present(intent)
-        return self._presenter.with_fallback_strategy(
-            self._fallback_strategy_provider(intent)
-        ).present(intent)
-
-    def _broadcast(self, colour, kind):
-        self._selected_intent = self._intent_from_value(colour)
-        snapshot = ColourSnapshot(self._present(self._selected_intent), kind)
-        for listener in list(self._foreground_listeners):
-            listener(snapshot)
+        self.last_force_sync = force
+        return super().sync_external_foreground(force=force)
 
     def emit_foreground(self, colour):
-        self._broadcast(colour, ChangeKind.EXTERNAL)
-
-    def _intent_from_value(self, colour):
-        fallback_hue = 0.0 if self._selected_intent is None else self._selected_intent.hue
-        return ColourIntent.from_value(colour, achromatic_hue=fallback_hue)
+        self.adapter.foreground = colour
+        return self.sync_external_foreground(force=True)
 
 
 class SpyPresenter:

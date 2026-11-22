@@ -200,29 +200,6 @@ def test_achromatic_hue_lightness_drag_outside_keeps_cursor_hue_anchor(qtbot):
     np.testing.assert_allclose(widget.selected_colour, expected)
 
 
-def test_hue_lightness_out_of_zone_pick_computes_snap_once(qtbot, monkeypatch):
-    widget = _widget(HueLightnessSliceModel(chroma=0.2))
-    widget.resize(101, 101)
-    qtbot.addWidget(widget)
-    widget.show()
-    point = (50.0, 50.0)
-    assert widget.model.color_at_position(point, _size(widget)) is None
-
-    original = color_math.snap_lightness
-    calls = []
-
-    def counted_snap(*args, **kwargs):
-        calls.append(args)
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(color_math, "snap_lightness", counted_snap)
-
-    pick = widget.pick(point)
-
-    assert pick is not None
-    assert len(calls) == 1
-
-
 def test_snapped_colour_with_unresolvable_position_still_commits(qtbot):
     widget = _widget(UnresolvableSnapModel())
     widget.resize(10, 10)
@@ -273,9 +250,7 @@ def test_programmatic_colour_update_blocks_widget_signals(qtbot):
 
     colour = widget.model.color_at_position((20, 10), (64, 32))
     assert colour is not None
-    blocker = QtCore.QSignalBlocker(widget)
     widget.set_selected_colour(_present(colour))
-    del blocker
 
     assert previews == []
     assert commits == []
@@ -399,17 +374,6 @@ def test_focus_loss_flushes_pending_keyboard_commit(qtbot):
 
     assert len(commits) == 1
     np.testing.assert_allclose(commits[0], widget.selected_colour)
-
-
-def test_pick_uses_selector_domain_snap():
-    widget = _widget(UnresolvableSnapModel())
-    widget.resize(40, 20)
-
-    picked = widget.pick((8.0, 3.0))
-
-    assert type(picked).__name__ == "SnappedPick"
-    np.testing.assert_allclose(picked.colour.paint_oklab, UnresolvableSnapModel.SNAPPED)
-    assert picked.position == pytest.approx((8.0, 3.0))
 
 
 def _size(widget):

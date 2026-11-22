@@ -52,20 +52,20 @@ def test_256_renderers_meet_median_budget():
 
 
 @pytest.mark.perf
-def test_256_cold_renderers_meet_startup_budget_without_cache_warmup():
+def test_fresh_selector_images_meet_startup_budget():
     cases = [
-        LightnessSliceModel(lightness=0.55),
-        HueLightnessSliceModel(chroma=0.05),
-        LightnessChromaSliceModel(hue=1.25),
+        (LightnessSliceModel, 0.51),
+        (HueLightnessSliceModel, 0.051),
+        (LightnessChromaSliceModel, 1.31),
     ]
 
-    for model in cases:
+    for index, (model_type, coordinate) in enumerate(cases):
         timings = []
-        for _ in range(COLD_SAMPLE_COUNT):
-            renderers._render_rgba_cached.cache_clear()
-            renderers._pixel_grid.cache_clear()
+        for sample in range(COLD_SAMPLE_COUNT):
+            model = model_type(coordinate + sample * 0.0001)
+            size = (256 + sample, 256 + index)
             start = time.perf_counter()
-            render_rgba(model, (256, 256))
+            render_rgba(model, size)
             timings.append(time.perf_counter() - start)
 
         median = statistics.median(timings)

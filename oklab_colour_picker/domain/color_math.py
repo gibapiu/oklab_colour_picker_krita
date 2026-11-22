@@ -13,7 +13,6 @@ ACHROMATIC_CHROMA_EPSILON = 1e-7
 SRGB_GAMUT_EPSILON = 1e-6
 _SRGB_ROOT_ROUNDOFF_RESERVE = 1e-12
 MAX_SATURATION_HALLEY_ITERATIONS = 3
-GAMUT_INTERSECTION_HALLEY_ITERATIONS = 3
 
 _LINEAR_SRGB_TO_LMS = np.array(
     [
@@ -307,120 +306,6 @@ def find_cusp(a_, b_):
     lightness = np.cbrt(1.0 / np.max(rgb_at_max, axis=-1))
     chroma = lightness * saturation
     return _scalar_if_scalar(lightness), _scalar_if_scalar(chroma)
-
-
-def find_gamut_intersection(a_, b_, l1, c1, l0, cusp=None):
-    """Estimate one sRGB boundary crossing for a ray with positive chroma."""
-
-    a_, b_, l1, c1, l0 = np.broadcast_arrays(
-        np.asarray(a_, dtype=float),
-        np.asarray(b_, dtype=float),
-        np.asarray(l1, dtype=float),
-        np.asarray(c1, dtype=float),
-        np.asarray(l0, dtype=float),
-    )
-    if np.any(c1 <= 0.0):
-        raise ValueError("c1 must be greater than zero")
-
-    if cusp is None:
-        l_cusp, c_cusp = find_cusp(a_, b_)
-    else:
-        l_cusp, c_cusp = cusp
-
-    l_cusp = np.asarray(l_cusp, dtype=float)
-    c_cusp = np.asarray(c_cusp, dtype=float)
-    lower_half = (l1 - l0) * c_cusp - (l_cusp - l0) * c1 <= 0.0
-
-    lower_t = c_cusp * l0 / (c1 * l_cusp + c_cusp * (l0 - l1))
-    upper_t = c_cusp * (l0 - 1.0) / (c1 * (l_cusp - 1.0) + c_cusp * (l0 - l1))
-    t = np.where(lower_half, lower_t, upper_t)
-
-    t = np.where(lower_half, t, _refine_upper_intersection_t(a_, b_, l1, c1, l0, t))
-    return _scalar_if_scalar(np.maximum(t, 0.0))
-
-
-def max_chroma_for_lh(lightness, hue):
-    """Estimate an outer chroma boundary at fixed lightness and hue."""
-
-    lightness, hue = np.broadcast_arrays(
-        np.asarray(lightness, dtype=float),
-        np.asarray(hue, dtype=float),
-    )
-    a_ = np.cos(hue)
-    b_ = np.sin(hue)
-    cusp = find_cusp(a_, b_)
-    chroma = find_gamut_intersection(a_, b_, lightness, np.ones_like(lightness), lightness, cusp=cusp)
-    chroma = np.where((lightness <= 0.0) | (lightness >= 1.0), 0.0, chroma)
-    return _scalar_if_scalar(chroma)
-
-
-def _refine_upper_intersection_t(a_, b_, l1, c1, l0, t):
-    d_l = l1 - l0
-    d_c = c1
-    k_l, k_m, k_s = _oklab_hue_to_lms_coefficients(a_, b_)
-
-    l_dt = d_l + d_c * k_l
-    m_dt = d_l + d_c * k_m
-    s_dt = d_l + d_c * k_s
-
-    for _ in range(GAMUT_INTERSECTION_HALLEY_ITERATIONS):
-        l = l0 * (1.0 - t) + t * l1
-        c = t * c1
-        l_ = _OKLAB_TO_LMS[0, 0] * l + c * k_l
-        m_ = _OKLAB_TO_LMS[1, 0] * l + c * k_m
-        s_ = _OKLAB_TO_LMS[2, 0] * l + c * k_s
-
-        r, t_r = _halley_channel_t(
-            *_LMS3_TO_LINEAR_SRGB[0],
-            l_,
-            m_,
-            s_,
-            l_dt,
-            m_dt,
-            s_dt,
-        )
-        g, t_g = _halley_channel_t(
-            *_LMS3_TO_LINEAR_SRGB[1],
-            l_,
-            m_,
-            s_,
-            l_dt,
-            m_dt,
-            s_dt,
-        )
-        b, t_b = _halley_channel_t(
-            *_LMS3_TO_LINEAR_SRGB[2],
-            l_,
-            m_,
-            s_,
-            l_dt,
-            m_dt,
-            s_dt,
-        )
-        active_channel = np.argmax(np.stack((r, g, b), axis=0), axis=0)
-        corrections = np.stack((t_r, t_g, t_b), axis=0)
-        correction = np.take_along_axis(corrections, active_channel[None, ...], axis=0)[0]
-        t = t + correction
-
-    return t
-
-
-def _halley_channel_t(wl, wm, ws, l_, m_, s_, l_dt, m_dt, s_dt):
-    channel = wl * l_**3 + wm * m_**3 + ws * s_**3
-    channel_dt = (
-        3.0 * wl * l_dt * l_**2
-        + 3.0 * wm * m_dt * m_**2
-        + 3.0 * ws * s_dt * s_**2
-    )
-    channel_dt2 = (
-        6.0 * wl * l_dt * l_dt * l_
-        + 6.0 * wm * m_dt * m_dt * m_
-        + 6.0 * ws * s_dt * s_dt * s_
-    )
-    with np.errstate(divide="ignore", invalid="ignore"):
-        u_channel = (1.0 - channel) / channel_dt
-        correction = u_channel / (1.0 + 0.5 * channel_dt2 * u_channel / channel_dt)
-    return channel, correction
 
 
 def _scalar_if_scalar(value):

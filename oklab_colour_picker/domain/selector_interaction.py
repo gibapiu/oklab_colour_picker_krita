@@ -1,38 +1,14 @@
-"""Pure, Qt-free interaction state machine for the selector view.
-
-States are *objects*: each one owns its data, answers its
-own questions (``anchor``, ``broadcast``, ``indicator``) and returns typed
-interaction results. There is no conditional dispatch on a state tag and no
-ad-hoc "anchored" / "in-flight" state groups — those questions are answered
-polymorphically by the state itself.
-
-The module imports nothing from Qt, Krita, or the widget/dock layer, so the
-whole machine is unit-testable against a plain fake ``Ctx`` (see
-``tests/test_selector_interaction.py``). The Qt ``SelectorWidget`` is a humble
-adapter: it translates Qt events into state calls and renders what the state
-reports.
-
-``Ctx`` is the narrow port the widget implements.
-Colours are opaque to this module; copying/quantization are the widget's responsibility through ``Ctx``.
-"""
+"""Selector interaction state."""
 
 from __future__ import annotations
 
 from abc import ABC
 from dataclasses import dataclass
-from enum import Enum
-from typing import ClassVar, Protocol
+from typing import Protocol
 
 
 Position = tuple[float, float]
 Point = tuple[float, float]
-
-
-class StateKind(str, Enum):
-    IDLE = "IDLE"
-    DRAGGING = "DRAGGING"
-    KEYBOARD = "KEYBOARD"
-    PINNED = "PINNED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,7 +166,6 @@ class State(ABC):
     """Base state. Every event defaults to a no-op self-transition,
     so each concrete state only overrides the events it actually handles."""
 
-    kind: ClassVar[StateKind]
 
     @property
     def anchor(self) -> Position | None:
@@ -252,7 +227,6 @@ class _Anchored(State):
 class Idle(State):
     """Rendering an externally pushed colour; no anchor."""
 
-    kind: ClassVar[StateKind] = StateKind.IDLE
 
     def broadcast(self, ctx: Ctx, colour: object | None) -> InteractionResult:
         ctx.set_colour(colour)
@@ -267,7 +241,6 @@ class Dragging(_Anchored):
     _anchor: Position
     _before: object | None
     _last_valid: object | None
-    kind: ClassVar[StateKind] = StateKind.DRAGGING
 
     def broadcast(self, ctx: Ctx, colour: object | None) -> InteractionResult:
         return InteractionResult(self)
@@ -322,7 +295,6 @@ class Keyboard(_Anchored):
     """Arrow/page navigation in flight; commit pending until key-up/blur."""
 
     _anchor: Position
-    kind: ClassVar[StateKind] = StateKind.KEYBOARD
 
     def broadcast(self, ctx: Ctx, colour: object | None) -> InteractionResult:
         return InteractionResult(self)
@@ -353,7 +325,6 @@ class Pinned(_Anchored):
 
     _colour: object | None
     _anchor: Position
-    kind: ClassVar[StateKind] = StateKind.PINNED
 
     def broadcast(self, ctx: Ctx, colour: object | None) -> InteractionResult:
         if colour is not None and ctx.quantized_equal(colour, self._colour):
@@ -386,12 +357,9 @@ def _begin_keyboard(ctx: Ctx, point: Point, colour: object) -> InteractionResult
 
 
 class SelectorInteraction:
-    def __init__(self, initial: State | None = None) -> None:
-        self._state = initial or Idle()
+    def __init__(self) -> None:
+        self._state = Idle()
 
-    @property
-    def state_kind(self) -> StateKind:
-        return self._state.kind
 
     def dispatch(self, ctx: Ctx, command: SelectorCommand) -> InteractionResult:
         result = command.dispatch(self._state, ctx)
