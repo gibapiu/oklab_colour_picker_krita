@@ -59,6 +59,7 @@ class ReadoutSession:
     def __init__(self) -> None:
         self._current: PresentedColour | None = None
         self._previous: PresentedColour | None = None
+        self._last_committed: PresentedColour | None = None
         self._state = ReadoutState.IDLE
         self._latched_colour: _LatchedColour | None = None
         self._draft_intent: ColourIntent | None = None
@@ -78,6 +79,7 @@ class ReadoutSession:
     def seed_initial(self, colour: PresentedColour) -> ReadoutResult:
         self._current = colour
         self._previous = colour
+        self._last_committed = colour
         self._state = ReadoutState.IDLE
         self._latched_colour = None
         self._draft_intent = None
@@ -102,12 +104,10 @@ class ReadoutSession:
         return ReadoutResult.apply(colour)
 
     def _apply_colour(self, colour: PresentedColour, *, committed: bool) -> None:
-        if (
-            committed
-            and self._current is not None
-            and colour.intent != self._current.intent
-        ):
-            self._previous = self._current
+        if committed:
+            if self._last_committed is not None and colour.selector_lch != self._last_committed.selector_lch:
+                self._previous = self._last_committed
+            self._last_committed = colour
         self._current = colour
 
     def begin_edit(self) -> None:
