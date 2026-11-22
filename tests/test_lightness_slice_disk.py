@@ -133,7 +133,47 @@ def test_blue_gamut_contour_uses_rendered_mask_edges(qtbot):
     for index, segment in enumerate(segments):
         for endpoint in range(2):
             element = path.elementAt(2 * index + endpoint)
-            assert (element.x, element.y) == pytest.approx(segment[endpoint])
+            assert (element.x, element.y) == pytest.approx(segment[endpoint] + 0.5)
+
+
+@pytest.mark.parametrize(("size", "device_ratio"), [(501, 1), (1001, 1), (501, 2)])
+def test_blue_outline_keeps_transparent_gap_clear(qtbot, size, device_ratio):
+    widget = _widget(LightnessSliceModel(0.426041573241465))
+    widget.resize(size, size)
+    qtbot.addWidget(widget)
+    image_size = size * device_ratio
+    image = QtGui.QImage(image_size, image_size, QtGui.QImage.Format.Format_ARGB32)
+    image.setDevicePixelRatio(device_ratio)
+    image.fill(0)
+    painter = QtGui.QPainter(image)
+    widget._paint_gamut_contour(painter)
+    painter.end()
+    ptr = image.bits()
+    ptr.setsize(image.sizeInBytes())
+    alpha = np.frombuffer(ptr, dtype=np.uint8).reshape(image_size, image_size, 4)[..., 3]
+    mask = widget._image_cache_buffer[..., 3] != 0
+    mask = np.repeat(np.repeat(mask, device_ratio, axis=0), device_ratio, axis=1)
+
+    assert np.count_nonzero(alpha[mask]) > 0
+    assert not np.any(alpha[~mask])
+
+
+def test_gamut_outline_preserves_existing_painter_clip(qtbot):
+    widget = _widget(LightnessSliceModel(0.5))
+    widget.resize(101, 101)
+    qtbot.addWidget(widget)
+    image = QtGui.QImage(widget.size(), QtGui.QImage.Format.Format_ARGB32)
+    image.fill(0)
+    painter = QtGui.QPainter(image)
+    painter.setClipRect(QtCore.QRect(0, 0, 50, 101))
+    widget._paint_gamut_contour(painter)
+    assert painter.clipBoundingRect() == QtCore.QRectF(0, 0, 50, 101)
+    painter.end()
+    ptr = image.bits()
+    ptr.setsize(image.sizeInBytes())
+    alpha = np.frombuffer(ptr, dtype=np.uint8).reshape(101, 101, 4)[..., 3]
+    assert np.any(alpha[:, :50])
+    assert not np.any(alpha[:, 50:])
 
 
 def test_gamut_contour_does_not_call_outer_limit_estimator(qtbot, monkeypatch):

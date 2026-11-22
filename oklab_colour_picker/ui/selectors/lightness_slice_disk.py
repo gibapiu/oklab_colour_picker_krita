@@ -24,6 +24,7 @@ class LightnessSliceDiskWidget(SelectorWidget):
         super().__init__(model, parent)
         self._gamut_path_cache_key: tuple[SelectorModel, int, int] | None = None
         self._gamut_path_cache: QtGui.QPainterPath | None = None
+        self._gamut_clip_region = QtGui.QRegion()
 
     def _paint_indicator(self, painter: QtGui.QPainter) -> None:
         self._paint_chroma_rings(painter)
@@ -62,6 +63,7 @@ class LightnessSliceDiskWidget(SelectorWidget):
             return
 
         painter.save()
+        painter.setClipRegion(self._gamut_clip_region, QtCore.Qt.ClipOperation.IntersectClip)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
         painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
         halo = QtGui.QPen(QtGui.QColor(0, 0, 0, 180), 2.0)
@@ -81,7 +83,7 @@ class LightnessSliceDiskWidget(SelectorWidget):
         if self._gamut_path_cache_key == key and self._gamut_path_cache is not None:
             return self._gamut_path_cache
 
-        self._selector_image()
+        image = self._selector_image()
         if self._image_cache_buffer is None:
             raise AssertionError("rendered selector must have an RGBA buffer")
         segments = renderers.gamut_contour_segments(self._image_cache_buffer[..., 3] != 0)
@@ -89,7 +91,9 @@ class LightnessSliceDiskWidget(SelectorWidget):
         for start, end in segments:
             path.moveTo(float(start[0]), float(start[1]))
             path.lineTo(float(end[0]), float(end[1]))
+        path.translate(0.5, 0.5)
 
+        self._gamut_clip_region = QtGui.QRegion(QtGui.QBitmap.fromImage(image.createAlphaMask()))
         self._gamut_path_cache_key = key
         self._gamut_path_cache = path
         return path
