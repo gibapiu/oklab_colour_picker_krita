@@ -28,20 +28,13 @@ from oklab_colour_picker.models.geometry import (
 
 CHROMA_EPSILON = 1e-9
 LIGHTNESS_EPSILON = 1e-9
-_LIGHTNESS_SNAP_SAMPLES = np.linspace(0.0, 1.0, 257)
-_SNAP_BOUNDARY_ITERATIONS = 20
 _HUE_CUSP_SAMPLES = 1440
 _hue_cusp_table_cache: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
 
 
 @dataclass(frozen=True)
 class HueLightnessSliceModel(SelectorModel):
-    """Hue/lightness selector at a fixed OKLCh chroma.
-
-    Hue is the polar angle and OKLab lightness is inverse radius:
-    the centre is white-lightness (L=1) and the rim is black (L=0).
-    Pixels whose fixed chroma exceeds the per-(L, hue) sRGB gamut leaf are not selectable.
-    """
+    """Hue/lightness selector at fixed chroma."""
 
     chroma: float
     achromatic_indicator_hue: float | None = None
@@ -71,8 +64,7 @@ class HueLightnessSliceModel(SelectorModel):
             return None
         normalized_radius, hue, _, _ = geometry
         lightness = 1.0 - normalized_radius
-        max_chroma = color_math.max_chroma_for_lh(lightness, hue)
-        if self.chroma > max_chroma + CHROMA_EPSILON:
+        if not color_math.in_oklab_gamut(color_math.oklch_to_oklab((lightness, self.chroma, hue))):
             return None
         return (float(lightness), float(self.chroma), float(hue))
 
@@ -97,9 +89,7 @@ class HueLightnessSliceModel(SelectorModel):
             axis=-1,
         )
         oklab = color_math.oklch_to_oklab(oklch)
-        valid = circle_valid & color_math.in_srgb_gamut(
-            color_math.oklab_to_srgb(oklab), epsilon=1e-6
-        )
+        valid = circle_valid & color_math.in_oklab_gamut(oklab)
         return oklab, valid
 
     def position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
@@ -108,7 +98,7 @@ class HueLightnessSliceModel(SelectorModel):
             return None
         lightness = float(np.clip(float(lch[0]), 0.0, 1.0))
         hue = self._positioning_hue_for_colour_chroma(float(lch[1]), float(lch[2]))
-        if self.chroma > color_math.max_chroma_for_lh(lightness, hue) + CHROMA_EPSILON:
+        if not color_math.in_oklab_gamut(color_math.oklch_to_oklab((lightness, self.chroma, hue))):
             return None
         return geometric
 
@@ -133,7 +123,7 @@ class HueLightnessSliceModel(SelectorModel):
         )
 
     def _nearest_disk_colour(self, lightness: float, hue: float) -> OKLCh | None:
-        hosted_lightness = _snap_lightness_to_gamut(self.chroma, hue, lightness)
+        hosted_lightness = color_math.snap_lightness(lightness, self.chroma, hue)
         if hosted_lightness is not None:
             return (hosted_lightness, self.chroma, hue)
         nearest = _nearest_hue_reaching_chroma(self.chroma, hue)
@@ -174,85 +164,28 @@ class HueLightnessSliceModel(SelectorModel):
             return None
 
         normalized_radius, hue = geometry
-        lightness = _snap_lightness_to_gamut(
-            self.chroma,
-            hue,
-            1.0 - normalized_radius,
-        )
+        lightness = color_math.snap_lightness(1.0 - normalized_radius, self.chroma, hue)
         if lightness is None:
             return None
         return lightness, hue
 
 
-def _snap_lightness_to_gamut(chroma: float, hue: float, desired_lightness: float) -> float | None:
-    # The scalar fast path avoids the 257-sample sweep on normal in-gamut
-    # drags, which is the common case.
-    if _lightness_in_gamut(chroma, hue, desired_lightness):
-        return desired_lightness
-
-    valid = chroma <= color_math.max_chroma_for_lh(_LIGHTNESS_SNAP_SAMPLES, hue) + CHROMA_EPSILON
-    valid_indices = np.flatnonzero(valid)
-    if not valid_indices.size:
-        return None
-
-    first = int(valid_indices[0])
-    last = int(valid_indices[-1])
-    lower = float(_LIGHTNESS_SNAP_SAMPLES[first])
-    upper = float(_LIGHTNESS_SNAP_SAMPLES[last])
-    if desired_lightness < lower and first > 0:
-        return _bisect_lightness_boundary(
-            chroma,
-            hue,
-            invalid_lightness=float(_LIGHTNESS_SNAP_SAMPLES[first - 1]),
-            valid_lightness=lower,
-        )
-    if desired_lightness > upper and last + 1 < _LIGHTNESS_SNAP_SAMPLES.size:
-        return _bisect_lightness_boundary(
-            chroma,
-            hue,
-            invalid_lightness=float(_LIGHTNESS_SNAP_SAMPLES[last + 1]),
-            valid_lightness=upper,
-        )
-
-    raise AssertionError("expected contiguous lightness gamut interval")
-
-
-def _bisect_lightness_boundary(
-    chroma: float,
-    hue: float,
-    *,
-    invalid_lightness: float,
-    valid_lightness: float,
-) -> float:
-    invalid = invalid_lightness
-    valid = valid_lightness
-    for _ in range(_SNAP_BOUNDARY_ITERATIONS):
-        midpoint = (invalid + valid) / 2.0
-        if _lightness_in_gamut(chroma, hue, midpoint):
-            valid = midpoint
-        else:
-            invalid = midpoint
-    return float(valid)
-
-
-def _lightness_in_gamut(chroma: float, hue: float, lightness: float) -> bool:
-    return bool(chroma <= color_math.max_chroma_for_lh(lightness, hue) + CHROMA_EPSILON)
-
-
 def _nearest_hue_reaching_chroma(chroma: float, hue: float) -> tuple[float, float] | None:
-    """Cusp ``(lightness, hue)`` of the nearest hue whose gamut reaches ``chroma``.
-
-    ``None`` only when ``chroma`` exceeds the whole sRGB gamut, leaving the disk
-    with no in-gamut pixel at all.
-    """
+    """Return a valid point at the nearest sampled hue."""
 
     hues, cusp_lightness, cusp_chroma = _hue_cusp_table()
     reaches = cusp_chroma >= chroma - CHROMA_EPSILON
     if not reaches.any():
         return None
     distance = np.where(reaches, _angular_distance(hues, hue), np.inf)
-    nearest = int(np.argmin(distance))
-    return float(cusp_lightness[nearest]), float(hues[nearest])
+    for nearest in np.argsort(distance, kind="stable"):
+        if not reaches[nearest]:
+            break
+        hosting_hue = float(hues[nearest])
+        lightness = color_math.snap_lightness(float(cusp_lightness[nearest]), chroma, hosting_hue)
+        if lightness is not None:
+            return lightness, hosting_hue
+    return None
 
 
 def _angular_distance(hues: np.ndarray, hue: float) -> np.ndarray:

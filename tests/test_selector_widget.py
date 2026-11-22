@@ -201,8 +201,6 @@ def test_achromatic_hue_lightness_drag_outside_keeps_cursor_hue_anchor(qtbot):
 
 
 def test_hue_lightness_out_of_zone_pick_computes_snap_once(qtbot, monkeypatch):
-    from oklab_colour_picker.models import hue_lightness_slice
-
     widget = _widget(HueLightnessSliceModel(chroma=0.2))
     widget.resize(101, 101)
     qtbot.addWidget(widget)
@@ -210,14 +208,14 @@ def test_hue_lightness_out_of_zone_pick_computes_snap_once(qtbot, monkeypatch):
     point = (50.0, 50.0)
     assert widget.model.color_at_position(point, _size(widget)) is None
 
-    original = hue_lightness_slice._snap_lightness_to_gamut
+    original = color_math.snap_lightness
     calls = []
 
     def counted_snap(*args, **kwargs):
         calls.append(args)
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(hue_lightness_slice, "_snap_lightness_to_gamut", counted_snap)
+    monkeypatch.setattr(color_math, "snap_lightness", counted_snap)
 
     pick = widget.pick(point)
 

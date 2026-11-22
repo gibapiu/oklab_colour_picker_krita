@@ -10,6 +10,8 @@ import numpy as np
 SRGB_GAMMA_THRESHOLD = 0.04045
 LINEAR_SRGB_GAMMA_THRESHOLD = 0.0031308
 ACHROMATIC_CHROMA_EPSILON = 1e-7
+SRGB_GAMUT_EPSILON = 1e-6
+_SRGB_ROOT_ROUNDOFF_RESERVE = 1e-12
 MAX_SATURATION_HALLEY_ITERATIONS = 3
 GAMUT_INTERSECTION_HALLEY_ITERATIONS = 3
 
@@ -138,11 +140,102 @@ def is_achromatic_chroma(chroma: float) -> bool:
     return float(chroma) <= ACHROMATIC_CHROMA_EPSILON
 
 
-def in_srgb_gamut(srgb, *, epsilon=0.0):
+def in_srgb_gamut(srgb, *, epsilon=SRGB_GAMUT_EPSILON):
     """Return whether gamma-encoded sRGB values are inside the display gamut."""
 
     srgb = np.asarray(srgb, dtype=float)
     return _bool_if_scalar(np.all((srgb >= -epsilon) & (srgb <= 1.0 + epsilon), axis=-1))
+
+
+def in_oklab_gamut(oklab):
+    """Classify scalar or vector OKLab with the shared sRGB roundoff tolerance."""
+
+    return in_srgb_gamut(oklab_to_srgb(oklab))
+
+
+def chroma_intervals_for_lh(lightness: float, hue: float) -> tuple[tuple[float, float], ...]:
+    """Return valid chroma intervals at fixed lightness and hue."""
+
+    start = oklch_to_oklab((lightness, 0.0, hue))
+    end = oklch_to_oklab((lightness, SRGB_MAX_CHROMA, hue))
+    return tuple((lo * SRGB_MAX_CHROMA, hi * SRGB_MAX_CHROMA) for lo, hi in _gamut_intervals(start, end))
+
+
+def lightness_intervals_for_ch(chroma: float, hue: float) -> tuple[tuple[float, float], ...]:
+    """Return all sRGB lightness intervals at fixed chroma and hue."""
+
+    return _gamut_intervals(oklch_to_oklab((0.0, chroma, hue)), oklch_to_oklab((1.0, chroma, hue)))
+
+
+def snap_chroma(lightness: float, chroma: float, hue: float) -> float:
+    """Keep valid chroma unchanged, otherwise choose its nearest valid interval."""
+
+    chroma = float(np.clip(chroma, 0.0, SRGB_MAX_CHROMA))
+    if in_oklab_gamut(oklch_to_oklab((lightness, chroma, hue))):
+        return chroma
+    snapped = _nearest_in_intervals(chroma, chroma_intervals_for_lh(lightness, hue))
+    if snapped is None:
+        raise AssertionError("selector lightness must host neutral sRGB")
+    return snapped
+
+
+def snap_lightness(lightness: float, chroma: float, hue: float) -> float | None:
+    """Choose the nearest valid lightness, or None when this hue cannot host C."""
+
+    lightness = float(np.clip(lightness, 0.0, 1.0))
+    if in_oklab_gamut(oklch_to_oklab((lightness, chroma, hue))):
+        return lightness
+    return _nearest_in_intervals(lightness, lightness_intervals_for_ch(chroma, hue))
+
+
+def _nearest_in_intervals(value, intervals):
+    if not intervals:
+        return None
+    candidates = (min(max(value, lower), upper) for lower, upper in intervals)
+    return min(candidates, key=lambda candidate: abs(candidate - value))
+
+
+def _gamut_intervals(start_oklab, end_oklab):
+    """Return valid intervals along an OKLab segment."""
+
+    delta_oklab = end_oklab - start_oklab
+    lms_start = start_oklab @ _OKLAB_TO_LMS.T
+    lms_delta = delta_oklab @ _OKLAB_TO_LMS.T
+    lms_cubics = np.stack((
+        lms_start**3,
+        3.0 * lms_start**2 * lms_delta,
+        3.0 * lms_start * lms_delta**2,
+        lms_delta**3,
+    ))
+    rgb_cubics = lms_cubics @ _LMS3_TO_LINEAR_SRGB.T
+    boundary_epsilon = SRGB_GAMUT_EPSILON - _SRGB_ROOT_ROUNDOFF_RESERVE
+    linear_bounds = srgb_to_linear((-boundary_epsilon, 1.0 + boundary_epsilon))
+    crossings = [0.0, 1.0]
+    for channel in range(3):
+        for bound in linear_bounds:
+            polynomial = rgb_cubics[:, channel].copy()
+            polynomial[0] -= bound
+            roots = np.polynomial.polynomial.polyroots(np.trim_zeros(polynomial, "b"))
+            crossings.extend(
+                float(root.real) for root in roots
+                if abs(root.imag) <= 1e-9 and 0.0 < root.real < 1.0
+            )
+    crossings = np.unique(crossings)
+    midpoints = (crossings[:-1] + crossings[1:]) * 0.5
+    valid = in_srgb_gamut(
+        oklab_to_srgb(start_oklab + midpoints[:, None] * delta_oklab), epsilon=boundary_epsilon
+    )
+    intervals = [
+        (float(lower), float(upper))
+        for lower, upper, inside in zip(crossings[:-1], crossings[1:], valid) if inside
+    ]
+    merged = []
+    for lower, upper in intervals:
+        if merged and lower <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], upper))
+        else:
+            merged.append((lower, upper))
+    return tuple(merged)
 
 
 def clip_srgb(srgb):
@@ -217,11 +310,7 @@ def find_cusp(a_, b_):
 
 
 def find_gamut_intersection(a_, b_, l1, c1, l0, cusp=None):
-    """Find the first sRGB gamut intersection on an OKLab lightness/chroma ray.
-
-    ``c1`` must be greater than zero. A zero-chroma ray has no chroma boundary
-    to intersect.
-    """
+    """Estimate one sRGB boundary crossing for a ray with positive chroma."""
 
     a_, b_, l1, c1, l0 = np.broadcast_arrays(
         np.asarray(a_, dtype=float),
@@ -251,7 +340,7 @@ def find_gamut_intersection(a_, b_, l1, c1, l0, cusp=None):
 
 
 def max_chroma_for_lh(lightness, hue):
-    """Return the maximum in-gamut OKLCh chroma for lightness and hue radians."""
+    """Estimate an outer chroma boundary at fixed lightness and hue."""
 
     lightness, hue = np.broadcast_arrays(
         np.asarray(lightness, dtype=float),

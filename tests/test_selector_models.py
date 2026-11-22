@@ -97,7 +97,8 @@ def test_lightness_slice_snap_clamps_to_per_hue_gamut():
     lightness, chroma, hue = color_math.oklab_to_oklch(snapped)
     np.testing.assert_allclose(lightness, 0.5, atol=1e-12)
     np.testing.assert_allclose(hue % math.tau, 0.0, atol=1e-9)
-    np.testing.assert_allclose(chroma, color_math.max_chroma_for_lh(0.5, 0.0), atol=1e-9)
+    assert chroma < color_math.SRGB_MAX_CHROMA
+    assert np.min(color_math.oklab_to_srgb(snapped)) == pytest.approx(-color_math.SRGB_GAMUT_EPSILON, abs=1e-10)
 
 
 def test_lightness_slice_snap_returns_in_gamut_position_unchanged():
@@ -218,7 +219,8 @@ def test_lightness_chroma_slice_snap_clamps_to_gamut_leaf():
     lightness, chroma, hue = color_math.oklab_to_oklch(snapped)
     np.testing.assert_allclose(lightness, 0.5, atol=1e-12)
     np.testing.assert_allclose(hue, 0.0, atol=1e-12)
-    np.testing.assert_allclose(chroma, color_math.max_chroma_for_lh(0.5, 0.0), atol=1e-9)
+    assert chroma < color_math.SRGB_MAX_CHROMA
+    assert np.min(color_math.oklab_to_srgb(snapped)) == pytest.approx(-color_math.SRGB_GAMUT_EPSILON, abs=1e-10)
 
 
 def test_lightness_chroma_slice_snap_projects_outside_rect_to_edge():

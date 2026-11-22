@@ -34,7 +34,7 @@ class SliceProjection(Protocol):
 
 @dataclass(frozen=True)
 class ClippedSrgbFallbackStrategy:
-    gamut_epsilon: float = 1e-9
+    gamut_epsilon: float = color_math.SRGB_GAMUT_EPSILON
 
     def resolve(self, colour: ColourIntent | Sequence[float]) -> FallbackResult:
         source = ColourIntent.from_value(colour)
@@ -59,7 +59,7 @@ class SliceProjectionFallbackStrategy:
     """
 
     projection: SliceProjection
-    gamut_epsilon: float = 1e-9
+    gamut_epsilon: float = color_math.SRGB_GAMUT_EPSILON
 
     def resolve(self, colour: ColourIntent | Sequence[float]) -> FallbackResult:
         source = ColourIntent.from_value(colour)

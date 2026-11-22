@@ -17,6 +17,9 @@ MODEL_CASES = (
     ("lightness-slice", LightnessSliceModel(lightness=0.55)),
     ("hue-lightness-slice", HueLightnessSliceModel(chroma=0.03)),
     ("lightness-chroma-slice", LightnessChromaSliceModel(hue=1.0)),
+    ("blue-lightness-slice", LightnessSliceModel(lightness=0.426041573241465)),
+    ("blue-hue-lightness-slice", HueLightnessSliceModel(chroma=0.272)),
+    ("blue-lightness-chroma-slice", LightnessChromaSliceModel(hue=math.radians(264.1))),
 )
 @settings(
     max_examples=200,
@@ -148,6 +151,8 @@ def test_p_projection_always_lands_on_slice_inside_gamut(case, first, second):
     # landed inside its gamut leaf.
     assert resolved is not None
     assert model.position_for_intent(resolved, (101.0, 101.0)) is not None
+    srgb = color_math.oklab_to_srgb(color_math.oklch_to_oklab(resolved))
+    assert np.all((srgb >= -1e-6) & (srgb <= 1.0 + 1e-6))
 
 
 @settings(max_examples=400, derandomize=True, deadline=None)
@@ -167,3 +172,5 @@ def test_p_hue_lightness_projection_never_blinks_off_the_disk(chroma, hue, light
     assert resolved is not None
     assert resolved[1] == pytest.approx(chroma)
     assert model.position_for_intent(resolved, (101.0, 101.0)) is not None
+    srgb = color_math.oklab_to_srgb(color_math.oklch_to_oklab(resolved))
+    assert np.all((srgb >= -1e-6) & (srgb <= 1.0 + 1e-6))

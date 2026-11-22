@@ -44,6 +44,32 @@ def test_indicator_position_comes_from_model(qtbot):
     assert widget.indicator_position() == pytest.approx(expected)
 
 
+@pytest.mark.parametrize("mode", ["lightness", "chroma", "hue"])
+def test_blue_boundary_colour_keeps_valid_indicator_in_every_slice(qtbot, mode):
+    intent = ColourIntent.from_oklab(color_math.srgb_to_oklab(np.array([0, 30, 224]) / 255.0))
+    models = {
+        "lightness": LightnessSliceModel(intent.lightness),
+        "chroma": HueLightnessSliceModel(intent.chroma),
+        "hue": LightnessChromaSliceModel(intent.hue),
+    }
+    model = models[mode]
+    widget = SelectorWidget(model)
+    widget.resize(200, 200)
+    qtbot.addWidget(widget)
+    presented = _present_on_slice(model, intent)
+
+    widget.show_colour(presented)
+
+    assert presented.in_gamut
+    assert widget.indicator_position() == pytest.approx(
+        model.geometric_position_for_intent(intent.selector_lch, _size(widget))
+    )
+    indicator = widget.model_indicator()
+    assert len(indicator.rings) == 1
+    assert indicator.rings[0].solid
+    np.testing.assert_allclose(widget.selected_colour, intent.paint_oklab, atol=1e-12)
+
+
 def test_indicator_position_tracks_widget_resize(qtbot):
     widget = SelectorWidget(LightnessChromaSliceModel(hue=math.pi / 3.0))
     widget.resize(80, 40)

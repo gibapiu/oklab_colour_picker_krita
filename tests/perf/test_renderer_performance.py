@@ -1,3 +1,4 @@
+import math
 import os
 import statistics
 import time
@@ -73,3 +74,33 @@ def test_256_cold_renderers_meet_startup_budget_without_cache_warmup():
             f"{type(model).__name__} cold 256px render took {median:.4f}s; "
             f"budget is {budget:.4f}s"
         )
+
+
+@pytest.mark.perf
+def test_blue_gap_projection_meets_interaction_budget():
+    lch = (0.426041573241465, 0.272, math.radians(264.207587271901))
+    models = (
+        LightnessSliceModel(lch[0]),
+        HueLightnessSliceModel(lch[1]),
+        LightnessChromaSliceModel(lch[2]),
+    )
+    for model in models:
+        timings = []
+        for _ in range(SAMPLE_COUNT):
+            start = time.perf_counter()
+            resolved = model.project_onto_slice(lch)
+            timings.append(time.perf_counter() - start)
+            assert resolved is not None
+        assert statistics.median(timings) <= _budget(PERFORMANCE_BUDGET_SECONDS)
+
+
+@pytest.mark.perf
+def test_gamut_contour_meets_interaction_budget():
+    mask = render_rgba(LightnessSliceModel(0.426041573241465), (256, 256))[..., 3] != 0
+    timings = []
+    for _ in range(SAMPLE_COUNT):
+        start = time.perf_counter()
+        segments = renderers.gamut_contour_segments(mask)
+        timings.append(time.perf_counter() - start)
+        assert len(segments) > 0
+    assert statistics.median(timings) <= _budget(PERFORMANCE_BUDGET_SECONDS)

@@ -13,6 +13,45 @@ from oklab_colour_picker.models import (
 )
 
 
+def test_gamut_contour_preserves_hole_and_separate_island():
+    mask = np.zeros((5, 7), dtype=bool)
+    mask[1:4, 1:4] = True
+    mask[2, 2] = False
+    mask[2, 5] = True
+    segments = renderers.gamut_contour_segments(mask)
+    edges = {tuple(map(tuple, segment)) for segment in segments}
+    assert len(segments) == len(edges) == 20
+    assert {
+        ((1.5, 1.5), (1.5, 2.5)),
+        ((2.5, 1.5), (2.5, 2.5)),
+        ((1.5, 1.5), (2.5, 1.5)),
+        ((1.5, 2.5), (2.5, 2.5)),
+    } <= edges
+    assert {
+        ((4.5, 1.5), (4.5, 2.5)),
+        ((5.5, 1.5), (5.5, 2.5)),
+        ((4.5, 1.5), (5.5, 1.5)),
+        ((4.5, 2.5), (5.5, 2.5)),
+    } <= edges
+
+
+def test_blue_gamut_contour_edges_separate_valid_and_transparent_pixels():
+    mask = render_rgba(LightnessSliceModel(0.426041573241465), (501, 501))[..., 3] != 0
+    padded = np.pad(mask, 1)
+    segments = renderers.gamut_contour_segments(mask)
+    for start, end in segments:
+        assert np.sum(np.abs(end - start)) == 1
+        x, y = (start + end) * 0.5
+        if start[0] == end[0]:
+            left = padded[int(y) + 1, int(x + 0.5)]
+            right = padded[int(y) + 1, int(x + 1.5)]
+            assert left != right
+        else:
+            above = padded[int(y + 0.5), int(x) + 1]
+            below = padded[int(y + 1.5), int(x) + 1]
+            assert above != below
+
+
 @pytest.mark.parametrize(
     "model",
     [

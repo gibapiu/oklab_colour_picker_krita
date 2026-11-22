@@ -72,9 +72,6 @@ def test_disk_widget_renders_overlay_pixels_on_top_of_base(qtbot):
     diff = np.any(overlay_pixels != bare_pixels, axis=-1)
     differing_pixels = int(diff.sum())
 
-    # The contour stroke alone covers ~360 sampled hues × ~3 px (halo + stroke)
-    # plus five chroma rings, so the difference should be substantial — in
-    # the hundreds of pixels — not a stray rounding artifact.
     assert differing_pixels > 200
 
     # And the overlay must reach across the disk: the C=0.05 ring sits well
@@ -113,29 +110,43 @@ def test_set_model_invalidates_gamut_path_cache(qtbot):
     widget.show()
 
     # Force the cache to populate.
-    first = widget._gamut_path(widget.model.lightness)
+    first = widget._gamut_path()
     assert first is not None
     assert widget._gamut_path_cache_key is not None
 
     widget.set_model(LightnessSliceModel(lightness=0.8))
-    assert widget._gamut_path_cache_key is None
-
-    second = widget._gamut_path(widget.model.lightness)
+    second = widget._gamut_path()
     assert second is not None
     # Different lightness → different leaf shape, so a different path object.
     assert second is not first
 
 
-def test_gamut_contour_uses_180_hue_samples(qtbot):
+def test_blue_gamut_contour_uses_rendered_mask_edges(qtbot):
+    from oklab_colour_picker.render import renderers
+
+    widget = _widget(LightnessSliceModel(lightness=0.426041573241465))
+    widget.resize(501, 501)
+    qtbot.addWidget(widget)
+    path = widget._gamut_path()
+    segments = renderers.gamut_contour_segments(widget._image_cache_buffer[..., 3] != 0)
+    assert path.elementCount() == 2 * len(segments)
+    for index, segment in enumerate(segments):
+        for endpoint in range(2):
+            element = path.elementAt(2 * index + endpoint)
+            assert (element.x, element.y) == pytest.approx(segment[endpoint])
+
+
+def test_gamut_contour_does_not_call_outer_limit_estimator(qtbot, monkeypatch):
     widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(80, 80)
     qtbot.addWidget(widget)
-    widget.show()
-
-    path = widget._gamut_path(widget.model.lightness)
+    def fail_on_outer_limit(*_args, **_kwargs):
+        raise AssertionError("contour must use the rendered mask")
+    monkeypatch.setattr(color_math, "max_chroma_for_lh", fail_on_outer_limit)
+    path = widget._gamut_path()
 
     assert path is not None
-    assert path.elementCount() == 181
+    assert path.elementCount() > 0
 
 
 def test_resize_invalidates_gamut_path_cache(qtbot):
@@ -144,33 +155,33 @@ def test_resize_invalidates_gamut_path_cache(qtbot):
     qtbot.addWidget(widget)
     widget.show()
 
-    widget._gamut_path(widget.model.lightness)
-    assert widget._gamut_path_cache_key == (0.5, 80, 80)
-    assert widget._gamut_contour_cache_key == 0.5
+    first = widget._gamut_path()
+    assert widget._gamut_path_cache_key == (widget.model, 80, 80)
 
     widget.resize(100, 100)
-    assert widget._gamut_path_cache_key is None
-    assert widget._gamut_contour_cache_key == 0.5
+    second = widget._gamut_path()
+    assert second is not first
+    assert widget._gamut_path_cache_key == (widget.model, 100, 100)
 
 
-def test_resize_reuses_expensive_gamut_contour_cache(qtbot, monkeypatch):
+def test_repaint_reuses_gamut_path_cache(qtbot, monkeypatch):
+    from oklab_colour_picker.render import renderers
     widget = _widget(LightnessSliceModel(lightness=0.5))
     widget.resize(80, 80)
     qtbot.addWidget(widget)
     widget.show()
 
-    first = widget._gamut_path(widget.model.lightness)
+    first = widget._gamut_path()
     assert first is not None
 
     def fail_on_boundary_solver(*_args, **_kwargs):
-        raise AssertionError("resize should reuse normalized gamut contour")
+        raise AssertionError("repaint should reuse the mask contour")
 
-    monkeypatch.setattr(color_math, "max_chroma_for_lh", fail_on_boundary_solver)
-    widget.resize(100, 100)
-    second = widget._gamut_path(widget.model.lightness)
+    monkeypatch.setattr(renderers, "gamut_contour_segments", fail_on_boundary_solver)
+    second = widget._gamut_path()
 
     assert second is not None
-    assert second is not first
+    assert second is first
 
 
 def test_gamut_path_caps_at_disk_radius(qtbot):
@@ -182,7 +193,7 @@ def test_gamut_path_caps_at_disk_radius(qtbot):
     qtbot.addWidget(widget)
     widget.show()
 
-    path = widget._gamut_path(0.95)
+    path = widget._gamut_path()
     assert path is not None
 
     radius = (min(widget.width(), widget.height()) - 1) / 2.0
@@ -227,10 +238,8 @@ def test_drag_past_gamut_leaf_snaps_to_cusp_at_cursor_hue(qtbot):
     np.testing.assert_allclose(lightness, 0.5, atol=1e-9)
     # Snap takes the cursor's hue at release, not the press hue.
     np.testing.assert_allclose(hue % math.tau, 0.0, atol=1e-6)
-    # And the chroma equals the per-hue cusp, which is strictly less than
-    # color_math.SRGB_MAX_CHROMA (the rim).
-    expected_chroma = float(color_math.max_chroma_for_lh(0.5, 0.0))
-    np.testing.assert_allclose(chroma, expected_chroma, atol=1e-9)
+    assert chroma < color_math.SRGB_MAX_CHROMA
+    assert np.min(color_math.oklab_to_srgb(commits[0])) == pytest.approx(-color_math.SRGB_GAMUT_EPSILON, abs=1e-10)
 
 
 def test_hover_outside_drag_does_not_snap(qtbot):
@@ -299,7 +308,8 @@ def test_drag_resumes_snapping_after_cursor_re_enters(qtbot):
     lightness, chroma, hue = (float(v) for v in color_math.oklab_to_oklch(commits[0]))
     np.testing.assert_allclose(lightness, 0.5, atol=1e-9)
     np.testing.assert_allclose(hue % math.tau, 0.0, atol=1e-6)
-    np.testing.assert_allclose(chroma, color_math.max_chroma_for_lh(0.5, 0.0), atol=1e-9)
+    assert chroma < color_math.SRGB_MAX_CHROMA
+    assert np.min(color_math.oklab_to_srgb(commits[0])) == pytest.approx(-color_math.SRGB_GAMUT_EPSILON, abs=1e-10)
 
 
 def _paint_of(c):
