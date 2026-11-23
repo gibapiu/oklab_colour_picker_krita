@@ -27,7 +27,7 @@ def test_initial_seed_sets_current_and_revert_baseline():
     assert session.state is ReadoutState.IDLE
 
 
-def test_committed_broadcast_advances_previous_but_preview_does_not():
+def test_commit_history_ignores_previews_and_normalized_echoes():
     session = ReadoutSession()
     first = _presented((0.5, 0.0, 0.0))
     preview = _presented((0.6, 0.01, 0.0))
@@ -42,7 +42,12 @@ def test_committed_broadcast_advances_previous_but_preview_does_not():
     session.show_colour(committed, committed=True)
 
     assert session.current is committed
-    assert session.previous is preview
+    assert session.previous is first
+
+    echo = presented_colour(committed.intent.with_krita_paint_oklab(committed.intent.quantized_paint_oklab))
+    session.show_colour(echo, committed=True)
+    assert session.current is echo
+    assert session.previous is first
 
 
 def test_edit_cancel_applies_latest_latched_colour():

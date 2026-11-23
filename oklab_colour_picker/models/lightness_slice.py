@@ -31,11 +31,7 @@ LIGHTNESS_EPSILON = 1e-9
 
 @dataclass(frozen=True)
 class LightnessSliceModel(SelectorModel):
-    """Circular hue/chroma selector at a fixed OKLab lightness.
-
-    Radius maps linearly to absolute OKLCh chroma in ``[0, color_math.SRGB_MAX_CHROMA]``, matching the Lightness tab's x-axis extent.
-    Pixels whose chroma exceeds the per-hue sRGB cusp at this lightness fall outside the gamut leaf and render transparent.
-    """
+    """Hue/chroma disk at fixed L; radius spans C=0 to SRGB_MAX_CHROMA."""
 
     lightness: float
 
@@ -62,8 +58,7 @@ class LightnessSliceModel(SelectorModel):
             return None
         normalized_radius, hue, _, _ = geometry
         chroma = normalized_radius * color_math.SRGB_MAX_CHROMA
-        max_chroma = color_math.max_chroma_for_lh(self.lightness, hue)
-        if chroma > max_chroma + CHROMA_EPSILON:
+        if not color_math.in_oklab_gamut(color_math.oklch_to_oklab((self.lightness, chroma, hue))):
             return None
         return (self.lightness, float(chroma), float(hue))
 
@@ -88,9 +83,7 @@ class LightnessSliceModel(SelectorModel):
             axis=-1,
         )
         oklab = color_math.oklch_to_oklab(oklch)
-        valid = circle_valid & color_math.in_srgb_gamut(
-            color_math.oklab_to_srgb(oklab), epsilon=1e-6
-        )
+        valid = circle_valid & color_math.in_oklab_gamut(oklab)
         return oklab, valid
 
     def position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
@@ -98,7 +91,7 @@ class LightnessSliceModel(SelectorModel):
         if geometric is None:
             return None
         chroma, hue = float(lch[1]), float(lch[2])
-        if chroma > color_math.max_chroma_for_lh(self.lightness, hue) + CHROMA_EPSILON:
+        if not color_math.in_oklab_gamut(color_math.oklch_to_oklab((self.lightness, chroma, hue))):
             return None
         return geometric
 
@@ -119,16 +112,14 @@ class LightnessSliceModel(SelectorModel):
             return None
         normalized_radius, hue = geometry
         desired_chroma = normalized_radius * color_math.SRGB_MAX_CHROMA
-        max_chroma = float(color_math.max_chroma_for_lh(self.lightness, hue))
-        chroma = max(0.0, min(desired_chroma, max_chroma))
+        chroma = color_math.snap_chroma(self.lightness, desired_chroma, hue)
         return (self.lightness, float(chroma), float(hue))
 
     def project_onto_slice(self, lch: OKLCh) -> OKLCh | None:
         lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])
         if abs(lightness - self.lightness) > LIGHTNESS_EPSILON:
             return None
-        max_chroma = float(color_math.max_chroma_for_lh(self.lightness, hue))
-        return (self.lightness, min(max(0.0, chroma), max_chroma), float(hue))
+        return (self.lightness, color_math.snap_chroma(self.lightness, chroma, hue), float(hue))
 
     def geometric_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         lightness, chroma, hue = float(lch[0]), float(lch[1]), float(lch[2])

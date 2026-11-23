@@ -55,6 +55,23 @@ def _validate_size(size: Sequence[int]) -> tuple[int, int]:
     return width, height
 
 
+def gamut_contour_segments(mask: npt.ArrayLike) -> np.ndarray:
+    """Return pixel edges bordering a rendered gamut mask."""
+
+    mask = np.asarray(mask, dtype=bool)
+    vertical = np.pad(mask, ((0, 0), (1, 1)))
+    y, x = np.nonzero(vertical[:, :-1] != vertical[:, 1:])
+    vertical_segments = np.stack(
+        (np.stack((x - 0.5, y - 0.5), axis=-1), np.stack((x - 0.5, y + 0.5), axis=-1)), axis=1
+    )
+    horizontal = np.pad(mask, ((1, 1), (0, 0)))
+    y, x = np.nonzero(horizontal[:-1, :] != horizontal[1:, :])
+    horizontal_segments = np.stack(
+        (np.stack((x - 0.5, y - 0.5), axis=-1), np.stack((x + 0.5, y - 0.5), axis=-1)), axis=1
+    )
+    return np.concatenate((vertical_segments, horizontal_segments))
+
+
 # Axis identifiers for OKLCh slider tracks.
 AXIS_L = "L"
 AXIS_C = "C"
@@ -153,7 +170,7 @@ def _oklch_grid(
 def _classify_track_pixels(oklch: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     oklab = color_math.oklch_to_oklab(oklch)
     srgb = color_math.oklab_to_srgb(oklab)
-    in_gamut = color_math.in_srgb_gamut(srgb, epsilon=1e-6)
+    in_gamut = color_math.in_srgb_gamut(srgb)
     return in_gamut, color_math.quantize_srgb8(srgb)
 
 

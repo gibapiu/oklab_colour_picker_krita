@@ -654,7 +654,7 @@ def test_out_of_gamut_commit_writes_the_active_slice_projection():
     lightness = 0.5
     model = LightnessChromaSliceModel(hue=hue)
     controller.set_fallback_strategy_provider(lambda _intent: SliceProjectionFallbackStrategy(model))
-    chroma = float(color_math.max_chroma_for_lh(lightness, hue)) * 1.5
+    chroma = 0.3
     intent = ColourIntent.from_lch(lightness, chroma, hue)
     projected = ColourIntent.from_lch(*model.project_onto_slice(intent.selector_lch))
 

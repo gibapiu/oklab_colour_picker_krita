@@ -65,8 +65,7 @@ class LightnessChromaSliceModel(SelectorModel):
         x, y, width, height = bounds
         lightness = 1.0 - y / (height - 1.0)
         chroma = (x / (width - 1.0)) * color_math.SRGB_MAX_CHROMA
-        max_chroma = color_math.max_chroma_for_lh(lightness, self.hue)
-        if chroma > max_chroma + CHROMA_EPSILON:
+        if not color_math.in_oklab_gamut(color_math.oklch_to_oklab((lightness, chroma, self.hue))):
             return None
         return (float(lightness), float(chroma), float(self.hue))
 
@@ -92,9 +91,7 @@ class LightnessChromaSliceModel(SelectorModel):
             axis=-1,
         )
         oklab = color_math.oklch_to_oklab(oklch)
-        valid = in_bounds & color_math.in_srgb_gamut(
-            color_math.oklab_to_srgb(oklab), epsilon=1e-6
-        )
+        valid = in_bounds & color_math.in_oklab_gamut(oklab)
         return oklab, valid
 
     def position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
@@ -103,7 +100,7 @@ class LightnessChromaSliceModel(SelectorModel):
             return None
         lightness = float(np.clip(float(lch[0]), 0.0, 1.0))
         chroma = max(0.0, float(lch[1]))
-        if chroma > color_math.max_chroma_for_lh(lightness, self.hue) + CHROMA_EPSILON:
+        if not color_math.in_oklab_gamut(color_math.oklch_to_oklab((lightness, chroma, self.hue))):
             return None
         return geometric
 
@@ -125,8 +122,7 @@ class LightnessChromaSliceModel(SelectorModel):
         x, y, width, height = geometry
         lightness = 1.0 - y / (height - 1.0)
         desired_chroma = (x / (width - 1.0)) * color_math.SRGB_MAX_CHROMA
-        max_chroma = float(color_math.max_chroma_for_lh(lightness, self.hue))
-        chroma = max(0.0, min(desired_chroma, max_chroma))
+        chroma = color_math.snap_chroma(lightness, desired_chroma, self.hue)
         return (float(lightness), float(chroma), float(self.hue))
 
     def project_onto_slice(self, lch: OKLCh) -> OKLCh | None:
@@ -134,8 +130,7 @@ class LightnessChromaSliceModel(SelectorModel):
         if not _on_hue_slice(chroma, hue, self.hue):
             return None
         lightness = float(np.clip(lightness, 0.0, 1.0))
-        max_chroma = float(color_math.max_chroma_for_lh(lightness, self.hue))
-        return (lightness, min(max(0.0, chroma), max_chroma), self.hue)
+        return (lightness, color_math.snap_chroma(lightness, chroma, self.hue), self.hue)
 
     def geometric_position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         bounds = size_bounds(size)

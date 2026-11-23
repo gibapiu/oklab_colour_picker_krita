@@ -8,15 +8,21 @@ from oklab_colour_picker.domain.gamut_fallback import ClippedSrgbFallbackStrateg
 
 def test_colour_presenter_resolves_intent_and_fallback_once():
     intent = ColourIntent.from_lch(0.6, color_math.SRGB_MAX_CHROMA, 0.0)
+    fallback = ClippedSrgbFallbackStrategy().resolve(intent)
+    calls = []
 
-    presentation = ColourPresenter(ClippedSrgbFallbackStrategy()).present(intent)
+    class Strategy:
+        def resolve(self, colour):
+            calls.append(colour)
+            return fallback
 
+    presentation = ColourPresenter(Strategy()).present(intent)
+
+    assert calls == [intent]
     assert presentation.intent is intent
-    assert presentation.fallback.source is intent
-    assert presentation.resolved_lch == presentation.fallback.resolved.selector_lch
-    assert presentation.fallback.srgb8 == tuple(
-        int(v) for v in color_math.oklab_to_srgb8(intent.paint_oklab)
-    )
+    assert presentation.fallback is fallback
+    assert presentation.resolved_lch == fallback.resolved.selector_lch
+    assert presentation.srgb8 == fallback.srgb8
 
 
 def test_colour_presenter_preserves_achromatic_hue_for_raw_oklab():

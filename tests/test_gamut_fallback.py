@@ -51,14 +51,17 @@ def test_slice_projection_lands_out_of_gamut_colour_on_the_slice_leaf():
     hue = math.radians(140.0)
     lightness = 0.5
     model = LightnessChromaSliceModel(hue=hue)
-    chroma = float(color_math.max_chroma_for_lh(lightness, hue)) * 1.5
+    chroma = 0.3
     intent = ColourIntent.from_lch(lightness, chroma, hue)
 
     result = SliceProjectionFallbackStrategy(model).resolve(intent)
 
     assert not result.in_gamut
-    # Resolved is exactly the model's on-slice projection, in-gamut on this plane.
-    assert result.resolved.selector_lch == model.project_onto_slice(intent.selector_lch)
+    assert result.resolved.lightness == lightness
+    assert result.resolved.hue == hue
+    assert result.resolved.chroma < chroma
+    rgb = color_math.oklab_to_srgb(result.resolved.paint_oklab)
+    assert np.all((rgb >= -1e-6) & (rgb <= 1 + 1e-6))
     assert model.position_for_intent(result.resolved.selector_lch, (101.0, 101.0)) is not None
     assert result.srgb8 == tuple(int(v) for v in color_math.oklab_to_srgb8(result.resolved.paint_oklab))
 

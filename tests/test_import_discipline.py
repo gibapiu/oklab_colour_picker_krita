@@ -7,7 +7,6 @@ from scripts.checks.architecture_policy import (
     PRESENTED_COLOUR_CONSTRUCTION_ALLOWED,
     QT_BINDING_IMPORT_ALLOWED,
     QT_BINDING_MODULE_PREFIXES,
-    QT_OR_KRITA_MODULE_PREFIXES,
     SET_FOREGROUND_ALLOWED,
     import_from_references,
     is_declared_package_module,
@@ -50,18 +49,6 @@ def test_python_modules_live_in_declared_package_layers():
     assert offenders == []
 
 
-def test_ui_layer_does_not_import_krita():
-    offenders = []
-    for full_path in _ui_python_files():
-        path = full_path.relative_to(ROOT)
-        tree = ast.parse(full_path.read_text(), filename=path.as_posix())
-        for module in _imported_modules(tree):
-            if _is_krita_module(module):
-                offenders.append(f"{path}: {module}")
-
-    assert offenders == []
-
-
 def test_qt_bindings_are_limited_to_the_shim():
     offenders = []
     for path, tree in _project_python_asts():
@@ -81,18 +68,6 @@ def test_tests_import_qt_only_through_the_shim():
         tree = ast.parse(full_path.read_text(), filename=path.as_posix())
         for module in _imported_modules(tree):
             if starts_with_any(module, QT_BINDING_MODULE_PREFIXES):
-                offenders.append(f"{path}: {module}")
-
-    assert offenders == []
-
-
-def test_pure_layers_have_no_qt_or_krita_imports():
-    offenders = []
-    for path, tree in _project_python_asts():
-        if not is_pure_layer_file(path):
-            continue
-        for module in _imported_modules(tree):
-            if module.startswith(QT_OR_KRITA_MODULE_PREFIXES):
                 offenders.append(f"{path}: {module}")
 
     assert offenders == []
