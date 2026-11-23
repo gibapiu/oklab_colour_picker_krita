@@ -67,7 +67,7 @@ class SelectorModel(ABC):
     def snapped_selector_selection_at_position(
         self, position: Sequence[float], size: Sequence[float]
     ) -> SelectorSelection | None:
-        """Return a drag-continuity snap selection or ``None`` for strict models."""
+        """Return a snapped selection, or None when no valid snap is available."""
 
 
 def positions_close(a: Position, b: Position) -> bool:
