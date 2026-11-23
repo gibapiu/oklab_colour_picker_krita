@@ -171,21 +171,19 @@ class HueLightnessSliceModel(SelectorModel):
 
 
 def _nearest_hue_reaching_chroma(chroma: float, hue: float) -> tuple[float, float] | None:
-    """Return (L, hue), or None if no sampled hue passes the gamut check."""
+    """Return (L, hue), or None if no candidate exists or its gamut check fails."""
 
     hues, cusp_lightness, cusp_chroma = _hue_cusp_table()
     reaches = cusp_chroma >= chroma - CHROMA_EPSILON
     if not reaches.any():
         return None
     distance = np.where(reaches, _angular_distance(hues, hue), np.inf)
-    for nearest in np.argsort(distance, kind="stable"):
-        if not reaches[nearest]:
-            break
-        hosting_hue = float(hues[nearest])
-        lightness = color_math.snap_lightness(float(cusp_lightness[nearest]), chroma, hosting_hue)
-        if lightness is not None:
-            return lightness, hosting_hue
-    return None
+    nearest = int(np.argmin(distance))
+    hosting_hue = float(hues[nearest])
+    lightness = color_math.snap_lightness(float(cusp_lightness[nearest]), chroma, hosting_hue)
+    if lightness is None:
+        return None
+    return lightness, hosting_hue
 
 
 def _angular_distance(hues: np.ndarray, hue: float) -> np.ndarray:

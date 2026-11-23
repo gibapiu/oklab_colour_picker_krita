@@ -4,7 +4,10 @@ import pytest
 pytest.importorskip("pytestqt")
 pytestmark = pytest.mark.qt
 
-from oklab_colour_picker.infrastructure.qt_facade import QtCore, QtGui
+from oklab_colour_picker.domain.colour_presentation import ColourPresenter
+from oklab_colour_picker.domain.colour_state import ColourIntent
+from oklab_colour_picker.domain.gamut_fallback import SliceProjectionFallbackStrategy
+from oklab_colour_picker.infrastructure.qt_facade import QtCore
 from oklab_colour_picker.models import HueLightnessSliceModel, LightnessSliceModel
 from oklab_colour_picker.render.renderers import render_rgba
 from oklab_colour_picker.ui.selectors import (
@@ -96,22 +99,23 @@ def test_outline_refreshes_after_model_or_size_change(qtbot, change):
     assert actual.shape != before.shape or np.any(actual != before)
 
 
-def test_outline_preserves_existing_painter_clip(qtbot):
-    widget = ContourDisk(LightnessSliceModel(0.5))
+def test_outline_leaves_out_of_gamut_indicator_visible(qtbot):
+    model = LightnessSliceModel(0.5)
+    widget = LightnessSliceDiskWidget(model)
     widget.resize(101, 101)
     qtbot.addWidget(widget)
-    image = QtGui.QImage(widget.size(), QtGui.QImage.Format.Format_RGBA8888)
-    image.fill(0)
-    painter = QtGui.QPainter(image)
-    painter.setClipRect(QtCore.QRect(0, 0, 50, 101))
-    widget._paint_gamut_contour(painter)
-    assert painter.clipBoundingRect() == QtCore.QRectF(0, 0, 50, 101)
-    painter.end()
-    pixels = image.bits()
-    pixels.setsize(image.sizeInBytes())
-    alpha = np.frombuffer(pixels, dtype=np.uint8).reshape(101, 101, 4)[..., 3]
-    assert np.any(alpha[:, :50])
-    assert not np.any(alpha[:, 50:])
+    before = render_pixels(widget)
+    intent = ColourIntent.from_lch(0.5, 0.3, 0)
+    presentation = ColourPresenter(SliceProjectionFallbackStrategy(model)).present(intent)
+    assert not presentation.in_gamut
+    widget.show_colour(presentation)
+    actual = render_pixels(widget)
+    position = model.geometric_position_for_intent(intent.selector_lch, (101, 101))
+    assert position is not None
+    x, y = (round(value) for value in position)
+    region = np.s_[y - 7:y + 8, x - 7:x + 8]
+    assert not render_rgba(model, (101, 101))[region][..., 3].any()
+    assert np.count_nonzero(actual[region][..., 3]) > np.count_nonzero(before[region][..., 3])
 
 
 def test_achromatic_pick_preserves_hue_when_resized(qtbot):

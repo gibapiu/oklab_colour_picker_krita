@@ -75,9 +75,10 @@ def test_lightness_slice_rejects_inverse_outside_gamut_boundary():
 
 def test_lightness_slice_snap_clamps_to_per_hue_gamut():
     model = LightnessSliceModel(lightness=0.5)
-    snapped = model.snapped_color_at_position((100.0, 50.0), (101.0, 101.0))
+    selection = model.snapped_selector_selection_at_position((100.0, 50.0), (101.0, 101.0))
 
-    assert snapped is not None
+    assert selection is not None
+    snapped = selection.paint_oklab
     lightness, chroma, hue = color_math.oklab_to_oklch(snapped)
     np.testing.assert_allclose(lightness, 0.5, atol=1e-12)
     np.testing.assert_allclose(hue % math.tau, 0.0, atol=1e-9)
@@ -91,17 +92,18 @@ def test_lightness_slice_snap_returns_in_gamut_position_unchanged():
     expected = model.color_at_position(position, (101.0, 101.0))
     assert expected is not None
 
-    snapped = model.snapped_color_at_position(position, (101.0, 101.0))
-    np.testing.assert_allclose(snapped, expected, atol=1e-12)
+    selection = model.snapped_selector_selection_at_position(position, (101.0, 101.0))
+    assert selection is not None
+    np.testing.assert_allclose(selection.paint_oklab, expected, atol=1e-12)
 
 
 @pytest.mark.parametrize("position", [(-1.0, 50.0), (50.0, 101.0), (0.0, 0.0)])
 def test_lightness_slice_snap_projects_outside_positions_to_disk(position):
     model = LightnessSliceModel(lightness=0.5)
-    snapped = model.snapped_color_at_position(position, (101.0, 101.0))
+    selection = model.snapped_selector_selection_at_position(position, (101.0, 101.0))
 
-    assert snapped is not None
-    assert model.position_for_intent(color_math.oklab_to_oklch(snapped), (101.0, 101.0)) is not None
+    assert selection is not None
+    assert model.position_for_intent(selection.lch, (101.0, 101.0)) is not None
 
 
 def test_lightness_chart_chroma_max_envelopes_srgb_cusp():
@@ -145,9 +147,10 @@ def test_lightness_chroma_slice_rejects_position_outside_per_hue_gamut():
 
 def test_lightness_chroma_slice_snap_clamps_to_gamut_leaf():
     model = LightnessChromaSliceModel(hue=0.0)
-    snapped = model.snapped_color_at_position((100.0, 50.0), (101.0, 101.0))
+    selection = model.snapped_selector_selection_at_position((100.0, 50.0), (101.0, 101.0))
 
-    assert snapped is not None
+    assert selection is not None
+    snapped = selection.paint_oklab
     lightness, chroma, hue = color_math.oklab_to_oklch(snapped)
     np.testing.assert_allclose(lightness, 0.5, atol=1e-12)
     np.testing.assert_allclose(hue, 0.0, atol=1e-12)
@@ -157,11 +160,12 @@ def test_lightness_chroma_slice_snap_clamps_to_gamut_leaf():
 
 def test_lightness_chroma_slice_snap_projects_outside_rect_to_edge():
     model = LightnessChromaSliceModel(hue=1.0)
-    snapped = model.snapped_color_at_position((-20.0, 50.0), (101.0, 101.0))
+    selection = model.snapped_selector_selection_at_position((-20.0, 50.0), (101.0, 101.0))
 
     expected = model.color_at_position((0.0, 50.0), (101.0, 101.0))
     assert expected is not None
-    np.testing.assert_allclose(snapped, expected, atol=1e-12)
+    assert selection is not None
+    np.testing.assert_allclose(selection.paint_oklab, expected, atol=1e-12)
 
 
 @pytest.mark.parametrize("hue", [math.nan, math.inf, -math.inf])
@@ -260,19 +264,20 @@ def test_hue_lightness_slice_rejects_position_outside_per_lightness_hue_gamut():
 
 def test_hue_lightness_slice_snap_finds_nearest_valid_lightness_on_spoke():
     model = HueLightnessSliceModel(chroma=0.2)
-    snapped = model.snapped_color_at_position((50.0, 50.0), (101.0, 101.0))
+    selection = model.snapped_selector_selection_at_position((50.0, 50.0), (101.0, 101.0))
 
-    assert snapped is not None
-    assert model.position_for_intent(color_math.oklab_to_oklch(snapped), (101.0, 101.0)) is not None
+    assert selection is not None
+    assert model.position_for_intent(selection.lch, (101.0, 101.0)) is not None
 
 
 def test_hue_lightness_slice_snap_projects_outside_circle_to_rim_angle():
     model = HueLightnessSliceModel(chroma=0.0)
-    snapped = model.snapped_color_at_position((150.0, 50.0), (101.0, 101.0))
+    selection = model.snapped_selector_selection_at_position((150.0, 50.0), (101.0, 101.0))
 
     expected = model.color_at_position((100.0, 50.0), (101.0, 101.0))
     assert expected is not None
-    np.testing.assert_allclose(snapped, expected, atol=1e-12)
+    assert selection is not None
+    np.testing.assert_allclose(selection.paint_oklab, expected, atol=1e-12)
 
 
 def test_hue_lightness_slice_achromatic_indicator_can_use_explicit_hue():

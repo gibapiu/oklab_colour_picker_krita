@@ -28,13 +28,7 @@ class SelectorSelection:
 
 
 class SelectorModel(ABC):
-    """Pure coordinate contract shared by selector widgets and renderers.
-
-    Position queries take canonical OKLCh ``(lightness, chroma, hue)`` - the UI's source of truth.
-    OKLab is reserved for``color_at_position`` outputs and the renderer pixel grid.
-
-    Querying with OKLCh removes the lossy ``oklab_to_oklch`` recovery that broke under Krita 8-bit normalisation.
-    """
+    """Coordinate and gamut contracts for OKLCh intent and OKLab output."""
 
     @abstractmethod
     def color_at_position(self, position: Sequence[float], size: Sequence[float]) -> np.ndarray | None:
@@ -59,34 +53,21 @@ class SelectorModel(ABC):
     def position_for_intent(self, lch: OKLCh, size: Sequence[float]) -> Position | None:
         """Return the in-gamut selector position for ``lch`` or ``None``."""
 
+    @abstractmethod
     def geometric_position_for_intent(
         self, lch: OKLCh, size: Sequence[float]
     ) -> Position | None:
         """Return where ``lch`` belongs on this slice, ignoring gamut clamping."""
 
-        return self.position_for_intent(lch, size)
-
+    @abstractmethod
     def project_onto_slice(self, lch: OKLCh) -> OKLCh | None:
         """Project an out-of-gamut ``lch`` onto this slice's in-gamut leaf."""
 
-        return None
-
-    def snapped_color_at_position(
-        self, position: Sequence[float], size: Sequence[float]
-    ) -> np.ndarray | None:
-        """Return a drag-continuity snap colour or ``None`` for strict models."""
-
-        selection = self.snapped_selector_selection_at_position(position, size)
-        if selection is None:
-            return None
-        return selection.paint_oklab
-
+    @abstractmethod
     def snapped_selector_selection_at_position(
         self, position: Sequence[float], size: Sequence[float]
     ) -> SelectorSelection | None:
         """Return a drag-continuity snap selection or ``None`` for strict models."""
-
-        return None
 
 
 def positions_close(a: Position, b: Position) -> bool:

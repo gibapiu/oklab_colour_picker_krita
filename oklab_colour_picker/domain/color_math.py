@@ -167,15 +167,12 @@ def lightness_intervals_for_ch(chroma: float, hue: float) -> tuple[tuple[float, 
 
 
 def snap_chroma(lightness: float, chroma: float, hue: float) -> float:
-    """Keep valid chroma unchanged, otherwise choose its nearest valid interval."""
+    """Return the nearest valid chroma at lightness in [0, 1]."""
 
     chroma = float(np.clip(chroma, 0.0, SRGB_MAX_CHROMA))
     if in_oklab_gamut(oklch_to_oklab((lightness, chroma, hue))):
         return chroma
-    snapped = _nearest_in_intervals(chroma, chroma_intervals_for_lh(lightness, hue))
-    if snapped is None:
-        raise AssertionError("selector lightness must host neutral sRGB")
-    return snapped
+    return _nearest_in_intervals(chroma, chroma_intervals_for_lh(lightness, hue))
 
 
 def snap_lightness(lightness: float, chroma: float, hue: float) -> float | None:
@@ -184,12 +181,11 @@ def snap_lightness(lightness: float, chroma: float, hue: float) -> float | None:
     lightness = float(np.clip(lightness, 0.0, 1.0))
     if in_oklab_gamut(oklch_to_oklab((lightness, chroma, hue))):
         return lightness
-    return _nearest_in_intervals(lightness, lightness_intervals_for_ch(chroma, hue))
+    intervals = lightness_intervals_for_ch(chroma, hue)
+    return _nearest_in_intervals(lightness, intervals) if intervals else None
 
 
 def _nearest_in_intervals(value, intervals):
-    if not intervals:
-        return None
     candidates = (min(max(value, lower), upper) for lower, upper in intervals)
     return min(candidates, key=lambda candidate: abs(candidate - value))
 

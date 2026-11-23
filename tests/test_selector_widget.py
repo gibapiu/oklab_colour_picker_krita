@@ -91,8 +91,9 @@ def test_warm_off_leaf_press_snaps_and_commits(qtbot):
     widget.previewed.connect(lambda c, _ps=previews: _ps.append(_paint_of(c)))
 
     off_leaf = QtCore.QPoint(0, 0)
-    expected = widget.model.snapped_color_at_position((off_leaf.x(), off_leaf.y()), _size(widget))
-    assert expected is not None
+    selection = widget.model.snapped_selector_selection_at_position((off_leaf.x(), off_leaf.y()), _size(widget))
+    assert selection is not None
+    expected = selection.paint_oklab
     send_mouse(widget, "press", off_leaf)
     send_mouse(widget, "move", off_leaf)
     send_mouse(widget, "release", off_leaf)
@@ -121,8 +122,9 @@ def test_hue_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
     first_valid = QtCore.QPoint(42, 32)
     latest_valid = QtCore.QPoint(46, 32)
     invalid_corner = QtCore.QPoint(0, 0)
-    expected = widget.model.snapped_color_at_position((invalid_corner.x(), invalid_corner.y()), _size(widget))
-    assert expected is not None
+    selection = widget.model.snapped_selector_selection_at_position((invalid_corner.x(), invalid_corner.y()), _size(widget))
+    assert selection is not None
+    expected = selection.paint_oklab
 
     send_mouse(widget, "press", first_valid)
     send_mouse(widget, "move", latest_valid)
@@ -134,9 +136,7 @@ def test_hue_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
     assert len(previews) == 3
     assert not any(preview is None for preview in previews)
     assert len(commits) == 1
-    expected_position = widget.model.position_for_intent(color_math.oklab_to_oklch(expected), _size(widget))
-    assert expected_position is not None
-    assert widget.indicator_position() == pytest.approx(expected_position, abs=1.0)
+    assert widget.indicator_position() == pytest.approx(selection.position, abs=1.0)
     np.testing.assert_allclose(commits[0], expected)
     np.testing.assert_allclose(widget.selected_colour, expected)
 
@@ -159,8 +159,9 @@ def test_lightness_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
     first_valid = QtCore.QPoint(12, 16)
     latest_valid = QtCore.QPoint(24, 16)
     invalid_gamut = QtCore.QPoint(63, 16)
-    expected = widget.model.snapped_color_at_position((invalid_gamut.x(), invalid_gamut.y()), _size(widget))
-    assert expected is not None
+    selection = widget.model.snapped_selector_selection_at_position((invalid_gamut.x(), invalid_gamut.y()), _size(widget))
+    assert selection is not None
+    expected = selection.paint_oklab
     assert widget.model.color_at_position((invalid_gamut.x(), invalid_gamut.y()), _size(widget)) is None
 
     send_mouse(widget, "press", first_valid)
@@ -171,9 +172,7 @@ def test_lightness_chroma_drag_outside_snaps_to_cursor_boundary(qtbot):
     # Invalid movement after a valid hit snaps to the gamut boundary.
     assert len(previews) == 3
     assert not any(preview is None for preview in previews)
-    expected_position = widget.model.position_for_intent(color_math.oklab_to_oklch(expected), _size(widget))
-    assert expected_position is not None
-    assert widget.indicator_position() == pytest.approx(expected_position, abs=1.0)
+    assert widget.indicator_position() == pytest.approx(selection.position, abs=1.0)
     assert len(commits) == 1
     np.testing.assert_allclose(commits[0], expected)
     np.testing.assert_allclose(widget.selected_colour, expected)
@@ -403,6 +402,12 @@ class UnresolvableSnapModel(SelectorModel):
         return np.zeros(x.shape + (3,), dtype=float), np.zeros_like(x, dtype=bool)
 
     def position_for_intent(self, lch, size):
+        return None
+
+    def geometric_position_for_intent(self, lch, size):
+        return None
+
+    def project_onto_slice(self, lch):
         return None
 
     def snapped_selector_selection_at_position(self, position, size):
